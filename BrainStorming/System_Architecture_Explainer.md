@@ -98,18 +98,46 @@ The system works as a 4-stage pipeline that runs sequentially:
 
 ---
 
-## 4. Database Schema Relationships (11 Tables)
+## 4. Database Schema Relationships & Detailed Column Design
 
-Understanding how the tables connect helps visualize the database:
+The 11 tables are divided into logical layers: **Configuration**, **Discovery**, **Observation & Tracking**, **Trend Derivations**, and **Audit Logs**.
 
-1.  **`concepts`**: The parent topic (e.g., "AI Agents").
-2.  **`channels`**: Unique YouTube creators tracked by the system.
-3.  **`videos`**: Videos associated with a channel and a concept.
-4.  **`search_runs`**: Records metadata when searching YouTube.
-5.  **`video_candidates`**: Search results matched with their semantic scores.
-6.  **`population_runs`**: Log of cohort selection trials.
-7.  **`population_members`**: The videos selected to be observed.
-8.  **`video_observations`**: Snapshots of views, likes, and comments.
-9.  **`video_metrics`**: Velocities and accelerations calculated from observations.
-10. **`concept_daily_signals`**: The final rolled-up daily signals for frontend charts.
-11. **`api_request_logs`**: System audit logs monitoring API quotas and errors.
+### 1. Configuration Layer
+*   **`concepts`**: Stores the trend topics.
+    *   *Key Columns*: `search_queries` (JSON array of strings).
+    *   *Usage*: The discovery engine reads these queries to run YouTube searches.
+*   **`channels`**: Tracks unique creators.
+    *   *Key Columns*: `subscriber_count` (used for creator percentile stratification calculations) and `published_at` (creation date of the channel to determine channel maturity).
+
+### 2. Discovery & Selection Layer
+*   **`search_runs`** & **`video_candidates`**: Logs discovery search operations.
+    *   *Key Columns*: `semantic_score` (cosine similarity score relative to concept description) and `creator_size_bucket` (`small`, `medium`, `big`).
+    *   *Usage*: We audit rejected candidates using `rejection_reason` (e.g., `semantic_below_threshold`, `language_mismatch`) to troubleshoot query filtering.
+*   **`population_runs`** & **`population_members`**: Logs active tracking groups.
+    *   *Key Columns*: `selection_rank` (relevance rank) and `active_until` (timestamp indicating when cohort monitoring expires).
+
+### 3. Observation Layer (Raw Data Collection)
+*   **`video_observations`**: Snapshots of a video's stats at a specific point in time.
+    *   *Key Columns*: `observed_at`, `view_count`, `like_count`, `comment_count`, `subscriber_count`.
+    *   *Usage*: We query these raw totals over time. They act as raw inputs to compute differences.
+
+### 4. Trend Derivation Layer (Mathematical Engine)
+*   **`video_metrics`**: The mathematical outputs calculated by comparing two observations.
+    *   *Key Columns*: 
+        *   `time_delta_hours`: Time elapsed between current and previous observation (crucial to calculate views per day accurately even if crawls occur at irregular intervals).
+        *   `view_velocity`: Difference in views divided by time delta in days. Represents growth speed.
+        *   `view_acceleration`: Difference in view velocity day-over-day. Represents growth momentum.
+        *   `reach_ratio_views`: Velocity divided by creator's subscriber count. Helps identify viral breakouts in smaller channels.
+    *   *Usage*: Queried by the aggregation engine to calculate high-velocity indicators.
+*   **`concept_daily_signals`**: Rolled up trend summary for frontend graphs.
+    *   *Key Columns*:
+        *   `median_view_velocity` / `average_view_velocity`: The central tendency of cohort speed.
+        *   `median_view_acceleration` / `average_view_acceleration`: Growth momentum.
+        *   `total_interaction_density`: Aggregated like & comment ratios.
+        *   `signal_score`: A normalized composite metric representing trend strength.
+    *   *Usage*: The frontend fetches these records to draw trend charts (showing signal strength over time).
+
+### 5. Audit Layer
+*   **`api_request_logs`**: Logs Google / Gemini requests.
+    *   *Key Columns*: `quota_cost` (tracked per endpoint), `duration_ms` (response latency), `success` (status flag), and `error_message` (debug trace).
+    *   *Usage*: Keeps track of external API health and ensures we do not hit YouTube quota limits.
