@@ -104,6 +104,62 @@ Open `http://localhost:5173` in your browser to view active trends, channel list
 
 ---
 
+## 📟 CLI Command Reference
+
+All CLI commands must be executed from the `backend/` folder using the virtual environment python interpreter:
+
+### 1. General Utility Commands
+
+*   **Diagnostics**: Check database connectivity, YouTube configuration parameters, and row counts across all 11 tables.
+    ```bash
+    myvenv/Scripts/python -m app.main diagnostics
+    ```
+    *Add `--mock` flag to run diagnostics using YouTube Mock API.*
+*   **Reset Database**: Terminate and clear all database tables (Clean slate). Safe deletion sequence respects foreign key constraints.
+    ```bash
+    myvenv/Scripts/python -m app.main reset-db
+    ```
+    *Add `--yes` flag to confirm deletion without prompts.*
+*   **Seed Database**: Load default trend concepts from `concepts.yaml` into the `concepts` table.
+    ```bash
+    myvenv/Scripts/python -m app.main seed-db
+    ```
+
+### 2. Ingestion Pipeline Commands
+
+Pipeline commands are nested under the `pipeline` group:
+
+*   **Validate Configurations**: Verify environment settings and validate YAML configuration files.
+    ```bash
+    myvenv/Scripts/python -m app.main pipeline validate
+    ```
+*   **Discover Candidates**: Execute search queries on YouTube, filter results by semantic similarity, bucketing, and select active population.
+    ```bash
+    myvenv/Scripts/python -m app.main pipeline discover
+    ```
+    *Options: Add `--mock` to use mock client; `--lookback-days <int>` to override discovery window.*
+*   **Observe Statistics**: Run daily metric logs (views, likes, comments, subscriber count) for the active population.
+    ```bash
+    myvenv/Scripts/python -m app.main pipeline observe
+    ```
+    *Options: Add `--mock` for mock statistics; `--date <ISO-Timestamp>` to override observation timestamp.*
+*   **Calculate Metrics**: Generate derived longitudinal features (velocities, growth, acceleration) from raw observations.
+    ```bash
+    myvenv/Scripts/python -m app.main pipeline metrics
+    ```
+*   **Aggregate Signals**: Roll up individual video metrics into concept daily aggregates.
+    ```bash
+    myvenv/Scripts/python -m app.main pipeline signals
+    ```
+    *Options: Add `--date YYYY-MM-DD` to target specific dates.*
+*   **Execute Full Pipeline Run**: Run discovery, observation, metric generation, and aggregation sequentially in a single execution.
+    ```bash
+    myvenv/Scripts/python -m app.main pipeline run
+    ```
+    *Options: Add `--mock` for mock execution; `--lookback-days <int>` to override search window; `--date YYYY-MM-DD` to execute for specific dates.*
+
+---
+
 ## 🧪 Testing
 
 The codebase includes an integration and unit test suite verifying mathematical derivations, retry/failure injection boundaries, and system idempotency.
@@ -113,3 +169,4 @@ Run the tests using:
 cd backend
 myvenv/Scripts/pytest tests -v
 ```
+
