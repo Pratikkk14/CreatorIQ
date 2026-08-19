@@ -1,0 +1,91 @@
+/* Global styles and design system variables */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --font-heading: 'Outfit', sans-serif;
+  --font-body: 'Plus Jakarta Sans', sans-serif;
+
+  /* Premium HSL Color Palette */
+  --bg-main: #0b0c10;
+  --bg-card: #14161f;
+  --bg-card-hover: #1b1e2b;
+  
+  --primary: #6366f1;       /* Indigo Glow */
+  --primary-hover: #4f46e5;
+  --primary-glow: rgba(99, 102, 241, 0.15);
+  
+  --secondary: #10b981;     /* Emerald Accent */
+  --secondary-glow: rgba(16, 185, 129, 0.15);
+  
+  --accent: #f43f5e;        /* Rose Warning */
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  
+  --border: rgba(148, 163, 184, 0.1);
+  --border-hover: rgba(148, 163, 184, 0.2);
+  --glass-bg: rgba(20, 22, 31, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.03);
+  
+  --shadow-sm: 0 2px 8px -1px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 30px -4px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px 0 rgba(99, 102, 241, 0.2);
+  
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Custom premium scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-hover);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Interactive elements */
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: var(--transition);
+}
+a:hover {
+  color: var(--text-primary);
+}
