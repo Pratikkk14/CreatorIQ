@@ -46,6 +46,7 @@ Thumbs.db
 
 # Agent Specific
 hardcoded_values_todo.md
+BrainStorming/stratch.md
 
 # Project specific binaries (to keep repo clean)
 *.docx
