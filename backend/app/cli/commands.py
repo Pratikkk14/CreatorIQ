@@ -78,17 +78,17 @@ def validate_config():
     try:
         # Load settings
         db_url = settings.get_db_url()
-        click.echo("√ Environment configurations parsed.")
+        click.echo("[OK] Environment configurations parsed.")
         
         # Load concepts config
         concepts = get_concepts_config()
-        click.echo(f"√ Concepts YAML loaded. Found {len(concepts)} concepts:")
+        click.echo(f"[OK] Concepts YAML loaded. Found {len(concepts)} concepts:")
         for idx, c in enumerate(concepts):
             click.echo(f"  {idx+1}. {c['name']} (queries: {c['search_queries']})")
             
         # Check DB
         if check_db_health():
-            click.echo("√ Database connection established successfully.")
+            click.echo("[OK] Database connection established successfully.")
         else:
             click.echo("X Database connection failed.", err=True)
             sys.exit(1)
@@ -189,8 +189,90 @@ def run_all(mock, lookback_days, target_date_str):
     
     click.echo("\n=== EXECUTION: Pipeline Run Complete ===")
 
+@cli.command("reset-db")
+@click.option("--yes", is_flag=True, help="Confirm database reset without confirmation prompt")
+def reset_db(yes):
+    """Delete all records from all tables in the database (Clean Slate)."""
+    if not yes:
+        if not click.confirm("Are you sure you want to delete all historical observations, signals, runs, channels, videos, and logs?"):
+            click.echo("Reset aborted.")
+            return
+            
+    click.echo("Resetting database tables...")
+    db = SessionLocal()
+    try:
+        from app.models.models import (
+            ApiRequestLog, ConceptDailySignal, VideoMetric, VideoObservation,
+            PopulationMember, PopulationRun, VideoCandidate, SearchRun, Video, Channel, Concept
+        )
+        
+        # Safe deletion sequence respecting foreign key constraints
+        click.echo("Clearing logs and signals...")
+        db.query(ApiRequestLog).delete()
+        db.query(ConceptDailySignal).delete()
+        
+        click.echo("Clearing metrics and observations...")
+        db.query(VideoMetric).delete()
+        db.query(VideoObservation).delete()
+        
+        click.echo("Clearing population cohorts...")
+        db.query(PopulationMember).delete()
+        db.query(PopulationRun).delete()
+        
+        click.echo("Clearing candidates and search runs...")
+        db.query(VideoCandidate).delete()
+        db.query(SearchRun).delete()
+        
+        click.echo("Clearing videos and channels...")
+        db.query(Video).delete()
+        db.query(Channel).delete()
+        
+        click.echo("Clearing trend concepts...")
+        db.query(Concept).delete()
+        
+        db.commit()
+        click.echo("[OK] Database successfully cleared. All tables are now empty.")
+    except Exception as e:
+        db.rollback()
+        click.echo(f"X Failed to clear database: {e}", err=True)
+    finally:
+        db.close()
+
+@cli.command("seed-db")
+def seed_db():
+    """Seed default trend concepts from concepts.yaml config."""
+    click.echo("Seeding database concepts from concepts.yaml...")
+    db = SessionLocal()
+    try:
+        from app.models.models import Concept
+        from app.core.config import get_concepts_config
+        
+        existing = db.query(Concept).count()
+        if existing > 0:
+            click.echo(f"Concepts table already has {existing} entries. Skipping seeding.")
+            return
+            
+        concepts_list = get_concepts_config()
+        for c_data in concepts_list:
+            concept = Concept(
+                name=c_data["name"],
+                description=c_data.get("description", ""),
+                active=c_data.get("active", True),
+                search_queries=c_data["search_queries"]
+            )
+            db.add(concept)
+        db.commit()
+        click.echo(f"[OK] Successfully seeded {len(concepts_list)} concepts.")
+    except Exception as e:
+        db.rollback()
+        click.echo(f"X Seeding failed: {e}", err=True)
+    finally:
+        db.close()
+
 cli.add_command(diagnostics)
 cli.add_command(pipeline_group)
+cli.add_command(reset_db)
+cli.add_command(seed_db)
 
 if __name__ == "__main__":
     cli()

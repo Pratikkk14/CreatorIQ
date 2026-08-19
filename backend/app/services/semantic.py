@@ -14,23 +14,17 @@ class SemanticService:
         self.ollama_active = False
         self.gemini_active = False
         
-        # Test Ollama availability
+        # Enable Ollama by default if configured
         if settings.ollama_base_url:
-            try:
-                # Quick health check call
-                resp = httpx.get(f"{settings.ollama_base_url}/api/tags", timeout=2.0)
-                if resp.status_code == 200:
-                    self.ollama_active = True
-                    logger.info("Ollama embedding service detected and active.")
-            except Exception:
-                logger.info("Ollama service not reachable. Will check Gemini.")
+            self.ollama_active = True
+            logger.info(f"Ollama embedding service configured as default active (URL: {settings.ollama_base_url}).")
 
-        # Test Gemini API key availability
+        # Test Gemini API key availability as a secondary fallback
         if settings.gemini_api_key:
             try:
                 genai.configure(api_key=settings.gemini_api_key)
                 self.gemini_active = True
-                logger.info("Gemini embedding service configured and active.")
+                logger.info("Gemini embedding service configured and active as fallback.")
             except Exception as e:
                 logger.error(f"Failed to configure Gemini: {e}")
 
@@ -72,13 +66,14 @@ class SemanticService:
                     "model": settings.ollama_embedding_model,
                     "prompt": text_cleaned
                 }
-                resp = httpx.post(url, json=payload, timeout=10.0)
+                resp = httpx.post(url, json=payload, timeout=30.0)
                 if resp.status_code == 200:
                     duration = int((time.time() - start_time) * 1000)
                     self._log_api_call("ollama", "/api/embeddings", "get_embedding", duration, True)
                     return resp.json()["embedding"]
             except Exception as e:
-                logger.warning(f"Ollama embedding failed: {e}. Falling back to Gemini.")
+                logger.warning(f"Ollama embedding failed: {e}. Disabling Ollama for this run and falling back to Gemini.")
+                self.ollama_active = False
 
         # 2. Try Gemini
         if self.gemini_active:
@@ -93,7 +88,8 @@ class SemanticService:
                 self._log_api_call("gemini", "embed_content", "get_embedding", duration, True)
                 return response["embedding"]
             except Exception as e:
-                logger.warning(f"Gemini embedding failed: {e}. Falling back to pseudo-embedding.")
+                logger.warning(f"Gemini embedding failed: {e}. Disabling Gemini for this run and falling back to pseudo-embedding.")
+                self.gemini_active = False
 
         # 3. Deterministic Pseudo-Embedding Fallback (offline/test mode)
         # We generate a deterministic embedding based on string contents
