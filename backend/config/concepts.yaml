@@ -1,0 +1,8 @@
+concepts:
+  - name: "AI Agents"
+    description: "Monitors agentic AI workflows, frameworks, and LLM automation tools"
+    active: true
+    search_queries:
+      - "AI agents"
+      - "agentic AI"
+      - "AI automation"

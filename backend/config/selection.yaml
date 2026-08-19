@@ -1,0 +1,9 @@
+selection:
+  target_population_size: 5
+  creator_size_percentiles:
+    small_upper_pct: 33.3
+    medium_upper_pct: 66.6
+  soft_ratio:
+    big: 0.3
+    medium: 0.4
+    small: 0.3

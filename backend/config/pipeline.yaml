@@ -1,0 +1,11 @@
+pipeline:
+  discovery:
+    lookback_days: 7
+    max_results_per_query: 50
+    default_language: "en"
+  relevance:
+    min_semantic_score: 0.5
+    check_language: true
+  observation:
+    batch_size: 50
+    frequency_hours: 24
