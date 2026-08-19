@@ -44,9 +44,14 @@ Thumbs.db
 *.swp
 *.swo
 
+# Agent Specific
+hardcoded_values_todo.md
+
 # Project specific binaries (to keep repo clean)
 *.docx
 *.pdf
 *.zip
 *.tar.gz
+
+#Current Old System that has to be replaced
 Old_System/
