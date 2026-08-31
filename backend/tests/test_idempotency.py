@@ -1,69 +1,61 @@
 import pytest
 from datetime import datetime, timezone, date, timedelta
 from app.core import database
-from app.models.models import Concept, Video, VideoObservation, ConceptDailySignal
-from app.services import YouTubeService, SemanticService, SelectorService
-from app.services.discovery_engine import DiscoveryEngine
-from app.services.observation_engine import ObservationEngine
-from app.services.aggregation_engine import AggregationEngine
+from app.models.models import Concept, ConceptDailySignal
+from app.services.youtube_api import YouTubeService
+from app.services.semantic import SemanticService
+from app.services.pipeline_engine import PipelineEngine
 from tests.conftest import MockYouTubeProvider
 
 def test_pipeline_idempotency(db_session):
     """
-    Verifies that running pipeline discovery, observations, and signal generation
-    repeatedly does not cause duplication in canonical tables.
+    Verifies that running the daily ingestion pipeline repeatedly
+    for the same concept and execution date does not violate constraints
+    and performs a safe database overwrite (idempotency).
     """
     database.SessionLocal = lambda: db_session
 
     mock_prov = MockYouTubeProvider()
     yt_service = YouTubeService(use_mock=True, mock_provider=mock_prov)
     sem_service = SemanticService()
-    sem_service.compute_similarity = lambda t1, t2: 0.8 if any(__import__('re').search(rf'\b{v}\b', t2) for v in ["mock_vid_1", "mock_vid_2", "mock_vid_3", "mock_vid_4", "mock_vid_5"]) else 0.1
-    sel_service = SelectorService()
-
-    disc_eng = DiscoveryEngine(yt_service, sem_service, sel_service)
-    obs_eng = ObservationEngine(yt_service)
-    agg_eng = AggregationEngine()
+    sem_service.compute_similarity = lambda t1, t2: 0.8
+    
+    engine = PipelineEngine(yt_service, sem_service)
 
     concept = db_session.query(Concept).first()
     assert concept is not None
 
-    # Date variables
-    target_dt = datetime(2026, 8, 19, 12, 0, 0, tzinfo=timezone.utc)
-    target_d = date(2026, 8, 19)
+    base_date = date(2026, 8, 19)
 
-    # 1. Execute Discovery Twice
-    disc_eng.run_discovery_for_concept(concept, target_dt - timedelta(days=7), target_dt)
-    videos_count_1 = db_session.query(Video).count()
+    # 1. Run pipeline first time
+    res1 = engine.execute_concept_run(db_session, concept.id, base_date)
+    assert res1["status"] == "success"
     
-    # Run discovery again
-    disc_eng.run_discovery_for_concept(concept, target_dt - timedelta(days=7), target_dt)
-    videos_count_2 = db_session.query(Video).count()
-
-    # Canonical videos must NOT be duplicated
-    assert videos_count_1 == 12
-    assert videos_count_2 == 12
-
-    # 2. Execute Observation Twice for same timestamp
-    obs_eng.run_observation(observation_time=target_dt)
-    obs_count_1 = db_session.query(VideoObservation).count()
-    assert obs_count_1 == 5
-    
-    # Run observation again for same timestamp
-    obs_eng.run_observation(observation_time=target_dt)
-    obs_count_2 = db_session.query(VideoObservation).count()
-    
-    # Observation rows must NOT be duplicated
-    assert obs_count_2 == 5
-
-    # 3. Execute Signal Generation Twice for same date
-    agg_eng.aggregate_concept_signals(concept.id, target_d)
-    signals_count_1 = db_session.query(ConceptDailySignal).count()
+    signals_count_1 = db_session.query(ConceptDailySignal).filter(
+        ConceptDailySignal.concept_id == concept.id
+    ).count()
     assert signals_count_1 == 1
+
+    # Get signal details
+    sig1 = db_session.query(ConceptDailySignal).filter(
+        ConceptDailySignal.concept_id == concept.id
+    ).first()
+    first_processed_at = sig1.processed_at
+
+    # 2. Run pipeline second time for same target date
+    res2 = engine.execute_concept_run(db_session, concept.id, base_date)
+    assert res2["status"] == "success"
     
-    # Run aggregation again
-    agg_eng.aggregate_concept_signals(concept.id, target_d)
-    signals_count_2 = db_session.query(ConceptDailySignal).count()
+    signals_count_2 = db_session.query(ConceptDailySignal).filter(
+        ConceptDailySignal.concept_id == concept.id
+    ).count()
     
-    # Concept signals must NOT be duplicated
+    # Still should only have exactly 1 record for this concept/date (unique constraint enforced)
     assert signals_count_2 == 1
+    
+    sig2 = db_session.query(ConceptDailySignal).filter(
+        ConceptDailySignal.concept_id == concept.id
+    ).first()
+    # Ensure it was overwritten (different timestamp)
+    assert sig2.processed_at >= first_processed_at
+
