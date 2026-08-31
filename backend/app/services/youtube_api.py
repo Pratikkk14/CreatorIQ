@@ -11,6 +11,19 @@ from app.core.database import SessionLocal
 from app.models.models import ApiRequestLog
 
 class YouTubeService:
+    @staticmethod
+    def build_query(include_terms: List[str], exclude_terms: List[str]) -> str:
+        inc_part = " | ".join(include_terms)
+        if len(include_terms) > 1:
+            inc_part = f"({inc_part})"
+        
+        exc_part = " ".join(f"-{t}" for t in exclude_terms)
+        
+        query = inc_part
+        if exc_part:
+            query = f"{query} {exc_part}"
+        return query.strip()
+
     def __init__(self, use_mock: bool = False, mock_provider: Optional[Any] = None):
         self.use_mock = use_mock
         self.mock_provider = mock_provider
@@ -78,7 +91,8 @@ class YouTubeService:
             "part": "snippet",
             "type": "video",
             "maxResults": min(limit, 50),
-            "relevanceLanguage": "en"
+            "relevanceLanguage": "en",
+            "videoDimension": "2d"
         }
         if published_after_str:
             params["publishedAfter"] = published_after_str
