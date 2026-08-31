@@ -56,3 +56,9 @@ BrainStorming/stratch.md
 
 #Current Old System that has to be replaced
 Old_System/
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+

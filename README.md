@@ -1,24 +1,60 @@
-# YouTube Trend Prediction Ingestion System
+# YouTube Trend Intelligence Pipeline Ingestion System
 
-A high-performance, resilient, and longitudinal data ingestion system designed to track YouTube video metrics, classify creators dynamically, calculate derivative trend metrics (velocity, growth, acceleration), and output aggregate concept signals.
+A high-performance, resilient, and longitudinal data ingestion system designed to track YouTube video trends, filter search results dynamically, classify creators, calculate daily engagement metrics, and store flat aggregated trend signals with full video-level lineage.
 
-Built using the **MERN-adjacent stack** (Python FastAPI Backend + SQLite/PostgreSQL Database + Vite React Frontend).
+Built using the **Python FastAPI Backend** and a **Vite React Frontend**.
 
 ---
 
-## 🗺️ System Architecture
+## 🗺️ System Architecture & Ingestion Flow
 
-The following flow chart details the longitudinal ingestion pipeline from configuration loading to frontend visualization:
-![Here we are showing the FlowChart of current system](BrainStorming\HLD.png)
+The system runs a **consolidated, search-derived ingestion pipeline** in a single pass daily. The execution flow is as follows:
+
+```text
+    Concept Config (Inclusions & Exclusions)
+                       │
+                       ▼
+         Calculate target window (D - 3)
+                       │
+                       ▼
+      YouTube Search (Dimension: 2d, Max: 40)
+                       │
+                       ▼
+    Fetch Videos and Channel Details in Batches
+                       │
+                       ▼
+     Stage 1: Hard Filters (Views, Subs, Dur, Desc)
+                       │
+                       ▼
+     Stage 2: Language Filter (English validation)
+                       │
+                       ▼
+    Stage 3: Semantic Relevance (all-MiniLM-L6-v2)
+                       │
+                       ▼
+    Creator Bucketing via Relative Percentiles (Q25/Q75)
+                       │
+                       ▼
+    Calculate Engagement (Reach Ratio & Interaction Density)
+                       │
+                       ▼
+         Flag Outliers (mean + 2 * std)
+                       │
+                       ▼
+         Increment/Reset Outlier Streak
+                       │
+                       ▼
+    Persist Daily Signal & Population Audit Logs to DB
+```
+
 ---
 
-## 🚀 Key Features
+## 🚀 Key Architectural Principles
 
-* **Dynamic Creator Size Bucketing**: Rather than using hardcoded subscriber counts, the system calculates relative percentiles (Small `<=33.3%`, Medium `<=66.6%`, Big `>66.6%`) dynamically across all candidates discovered.
-* **Resilient Soft-Borrow Selector**: Implements stratified sampling logic to select target population sizes. If a creator bucket runs dry, the selector borrows valid candidates from adjacent buckets based on semantic scores.
-* **Longitudinal Tracking & Provenance**: Observes the active population over time, preserving historical immutability. If a video is deleted or private, observations log partial failures without breaking the pipeline.
-* **Derived Trend Metrics**: Computes daily changes in view counts, likes, and comments to calculate velocities, acceleration (change in velocity), and creator-bucket-specific trends.
-* **Graceful API Resilience**: Auto-logs all external API requests (Gemini, YouTube) to track quota costs and errors, with exponential backoffs and offline mock fallbacks.
+1. **Daily Search-Derived Populations**: The system does **not** permanently track a fixed pool of creator channels. Instead, for each concept and extraction date, it dynamically fetches a fresh set of candidates published exactly on target publication date `D - 3 days` (lag configurable).
+2. **Relative Creator Bucketing**: Rather than using hardcoded subscriber count limits, the system dynamically calculates the 25th percentile (Q25) and 75th percentile (Q75) of the subscriber counts of the *final surviving population* on that day, categorizing them into `small` (< Q25), `medium` (Q25 <= sub < Q75), and `big` (>= Q75).
+3. **Flat Daily Ingestion Signal Table**: Obsolete relational tables (`videos`, `channels`, `video_observations`, `video_candidates`, `population_runs`, `population_members`, `search_runs`) are inactive. The pipeline writes **exclusively** to `concept_daily_signals` and `api_request_logs`. Per-video audits, outliers, and filter rejection counts are stored directly inside flat JSON fields (`population`, `high_variance_flags`, `filter_audit`) in the daily signals table.
+4. **Strict Local Semantic Model**: Uses the local offline `all-MiniLM-L6-v2` SentenceTransformer model to calculate cosine similarity between the concept name and video text. If model loading or encoding fails, the pipeline fails explicitly to prevent silent fallbacks.
 
 ---
 
@@ -30,143 +66,122 @@ CreatorIQ/
 │   ├── app/
 │   │   ├── api/             # FastAPI REST endpoints
 │   │   ├── cli/             # Click command-line interface commands
-│   │   ├── core/            # Configuration, DB connection, and logger setup
-│   │   ├── models/          # Declarative SQLAlchemy models (11 tables)
-│   │   ├── services/        # YouTube, Semantic, Selector, and Engine services
-│   │   └── main.py          # Application entrypoint
-│   ├── alembic/             # Database migration configuration and revisions
-│   ├── tests/               # Pytest suite (E2E simulation, Idempotency, etc.)
-│   └── requirements.txt     # Python requirements
+│   │   ├── core/            # Configuration, database connection, scheduler
+│   │   ├── models/          # Declarative SQLAlchemy models (concepts, daily signals, api logs)
+│   │   ├── services/        # YouTube API wrapper, semantic model service, pipeline engine
+│   │   └── main.py          # Application entrypoint (CLI & FastAPI server setup)
+│   ├── config/              # YAML config files (concepts.yaml, pipeline.yaml, selection.yaml)
+│   ├── myvenv/              # Python virtual environment (Windows/Linux/macOS)
+│   └── requirements.txt     # Python requirements (including torch, sentence-transformers, langdetect)
 ├── frontend/
 │   ├── src/                 # React component layouts, graphs, and styling
 │   └── package.json         # Frontend package manifests
-├── hardcoded_values_todo.md # List of defaults to move to .env in production
+├── .env-samples             # Environment variables template file
 └── README.md                # System documentation
 ```
 
 ---
 
-## 🛠️ Installation & Setup
+## 🛠️ Developer Setup & Installation
 
-### 1. Prerequisite Setup
-Initialize a virtual environment and load dependencies inside `backend/`:
+All backend python commands **MUST** be run inside the virtual environment (`myvenv`) inside the `backend/` directory.
+
+### 1. Backend Setup
+Initialize the virtual environment and install packages:
 ```bash
 cd backend
 python -m venv myvenv
-myvenv/Scripts/activate     # Windows
-source myvenv/bin/activate  # macOS/Linux
+myvenv\Scripts\activate      # Windows PowerShell/CMD
+source myvenv/bin/activate   # macOS/Linux
+
 pip install -r requirements.txt
 ```
 
-### 2. Environment Variables
-Create a `.env` file in the workspace root directory:
-```env
-POSTGRES_DB="your_postgresql_or_neon_connection_string"
-Youtube_API_KEY="your_youtube_api_v3_key"
-Gemini_API_Key="your_gemini_api_key"
-OLLAMA_BASE_URL="http://localhost:11434"
-```
-
-### 3. Run Database Migrations
-Deploy schema migrations to your database:
+### 2. Configure Environment Variables
+Copy the template file `.env-samples` to a new file named `.env` in the workspace root:
 ```bash
-cd backend
-myvenv/Scripts/alembic upgrade head
+cp ../.env-samples ../.env
+```
+Open `.env` and fill in your connection string and credentials:
+* `DATABASE_URL` / `POSTGRES_DB` (PostgreSQL connection URL)
+* `Youtube_API_KEY` (Google Cloud Console YouTube Data API v3 key)
+
+### 3. Recreate and Seed Database Tables
+To drop any old database schemas and build/seed the new tables instantly, run:
+```bash
+# Drops all tables and recreates them with updated schema columns
+myvenv\Scripts\python -m app.main recreate-db
+
+# Seeds active concepts defined in config/concepts.yaml
+myvenv\Scripts\python -m app.main seed-db
 ```
 
 ---
 
-## 🏃 Run the Application
+## 🏃 Running the Application
 
-### Running System Diagnostics (Mock Mode)
-Execute the Click CLI tool to verify connectivity and retrieve system diagnostics:
+### 1. Manual Ingestion Run (Mock Mode)
+To run a full, unified extraction pipeline on mock data for development:
 ```bash
-cd backend
-myvenv/Scripts/python -m app.main diagnostics --mock
+myvenv\Scripts\python -m app.main pipeline run --mock
+```
+*Add option `--date YYYY-MM-DD` to target specific execution dates (defaults to today).*
+
+### 2. Manual Ingestion Run (Real API)
+To run the extraction pipeline querying real live YouTube endpoints:
+```bash
+myvenv\Scripts\python -m app.main pipeline run
 ```
 
-### Starting the Backend Web Server
-Launch the FastAPI development server:
+### 3. Start the Backend Web Server
+Launch the FastAPI server on port 8000:
 ```bash
-cd backend
-myvenv/Scripts/uvicorn app.main:api_app --host 127.0.0.1 --port 8000
+myvenv\Scripts\uvicorn app.main:api_app --host 127.0.0.1 --port 8000
 ```
-The server will boot and automatically seed default trend concepts from `config/concepts.yaml` if the database is empty. You can access the interactive API docs at `http://127.0.0.1:8000/docs`.
+This automatically boots the daily background cron scheduler (running at configured timezone/cron hour). View API documentation at `http://127.0.0.1:8000/docs`.
 
-### Starting the Frontend Dashboard
-Navigate to the `frontend` folder and boot up the Vite server:
+### 4. Start the Frontend React App
+In a separate terminal, install dependencies and boot the Vite development server:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Open `http://localhost:5173` in your browser to view active trends, channel lists, and ingestion metrics.
+Open `http://localhost:5173` in your browser. The frontend graphs will automatically display the daily trend signals and allow you to trace provenance lineages.
 
 ---
 
 ## 📟 CLI Command Reference
 
-All CLI commands must be executed from the `backend/` folder using the virtual environment python interpreter:
+All commands must be executed from the `backend/` folder:
 
-### 1. General Utility Commands
-
-*   **Diagnostics**: Check database connectivity, YouTube configuration parameters, and row counts across all 11 tables.
+*   **Diagnostics**: Check database connectivity, YouTube configuration parameters, and daily signals generated:
     ```bash
-    myvenv/Scripts/python -m app.main diagnostics
+    myvenv\Scripts\python -m app.main diagnostics
     ```
-    *Add `--mock` flag to run diagnostics using YouTube Mock API.*
-*   **Reset Database**: Terminate and clear all database tables (Clean slate). Safe deletion sequence respects foreign key constraints.
+*   **Reset Database**: Truncate all records from all database tables:
     ```bash
-    myvenv/Scripts/python -m app.main reset-db
+    myvenv\Scripts\python -m app.main reset-db --yes
     ```
-    *Add `--yes` flag to confirm deletion without prompts.*
-*   **Seed Database**: Load default trend concepts from `concepts.yaml` into the `concepts` table.
+*   **Recreate Database**: Drop all tables and rebuild schemas:
     ```bash
-    myvenv/Scripts/python -m app.main seed-db
+    myvenv\Scripts\python -m app.main recreate-db --yes
     ```
-
-### 2. Ingestion Pipeline Commands
-
-Pipeline commands are nested under the `pipeline` group:
-
-*   **Validate Configurations**: Verify environment settings and validate YAML configuration files.
+*   **Seed Database**: Seed default concepts:
     ```bash
-    myvenv/Scripts/python -m app.main pipeline validate
+    myvenv\Scripts\python -m app.main seed-db
     ```
-*   **Discover Candidates**: Execute search queries on YouTube, filter results by semantic similarity, bucketing, and select active population.
+*   **Run Pipeline**: Trigger the ingestion job:
     ```bash
-    myvenv/Scripts/python -m app.main pipeline discover
+    myvenv\Scripts\python -m app.main pipeline run [--mock] [--date YYYY-MM-DD]
     ```
-    *Options: Add `--mock` to use mock client; `--lookback-days <int>` to override discovery window.*
-*   **Observe Statistics**: Run daily metric logs (views, likes, comments, subscriber count) for the active population.
-    ```bash
-    myvenv/Scripts/python -m app.main pipeline observe
-    ```
-    *Options: Add `--mock` for mock statistics; `--date <ISO-Timestamp>` to override observation timestamp.*
-*   **Calculate Metrics**: Generate derived longitudinal features (velocities, growth, acceleration) from raw observations.
-    ```bash
-    myvenv/Scripts/python -m app.main pipeline metrics
-    ```
-*   **Aggregate Signals**: Roll up individual video metrics into concept daily aggregates.
-    ```bash
-    myvenv/Scripts/python -m app.main pipeline signals
-    ```
-    *Options: Add `--date YYYY-MM-DD` to target specific dates.*
-*   **Execute Full Pipeline Run**: Run discovery, observation, metric generation, and aggregation sequentially in a single execution.
-    ```bash
-    myvenv/Scripts/python -m app.main pipeline run
-    ```
-    *Options: Add `--mock` for mock execution; `--lookback-days <int>` to override search window; `--date YYYY-MM-DD` to execute for specific dates.*
 
 ---
 
 ## 🧪 Testing
 
-The codebase includes an integration and unit test suite verifying mathematical derivations, retry/failure injection boundaries, and system idempotency.
-
-Run the tests using:
+Execute the test suite to assert calculations and E2E simulation correctness:
 ```bash
 cd backend
-myvenv/Scripts/pytest tests -v
+myvenv\Scripts\pytest tests -v
 ```
-

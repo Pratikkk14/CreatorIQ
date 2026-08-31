@@ -39,7 +39,8 @@ def fixture_db_session():
         name="AI Agents",
         description="Monitors agentic AI workflows, frameworks, and LLM automation tools",
         active=True,
-        search_queries=["AI agents", "agentic AI", "AI automation"]
+        include_terms=["AI agents", "agentic AI", "AI automation"],
+        exclude_terms=[]
     )
     session.add(concept)
     session.commit()

@@ -3,13 +3,16 @@ from sqlalchemy.orm import Session
 from datetime import datetime, date, timezone
 from typing import List, Dict, Any, Optional
 from app.core.database import get_db, check_db_health
-from app.core.config import settings, get_concepts_config
+from app.core.config import settings
+from sqlalchemy import func
 from app.models.models import (
-    Concept, Video, VideoCandidate, PopulationMember, PopulationRun, 
-    VideoObservation, VideoMetric, ConceptDailySignal, SearchRun, ApiRequestLog,
-    Channel
+    Concept, ConceptDailySignal, ApiRequestLog
 )
-from app.services import YouTubeService, SemanticService, SelectorService, DiscoveryEngine, ObservationEngine, MetricsEngine, AggregationEngine
+from app.services.youtube_api import YouTubeService
+from app.services.semantic import SemanticService
+from app.services.pipeline_engine import PipelineEngine
+from app.core.database import SessionLocal
+from app.core.logging import logger
 
 router = APIRouter()
 
@@ -23,17 +26,13 @@ def get_diagnostics(db: Session = Depends(get_db)):
     
     # Counts
     concepts_count = db.query(Concept).count()
-    videos_count = db.query(Video).count()
-    candidates_count = db.query(VideoCandidate).count()
-    members_count = db.query(PopulationMember).count()
-    observations_count = db.query(VideoObservation).count()
     signals_count = db.query(ConceptDailySignal).count()
+    videos_count = db.query(func.sum(ConceptDailySignal.population_size)).scalar() or 0
     
     # Failures count
     failures_count = db.query(ApiRequestLog).filter(ApiRequestLog.success == False).count()
     
     # Timestamps
-    latest_obs = db.query(VideoObservation.observed_at).order_by(VideoObservation.observed_at.desc()).first()
     latest_sig = db.query(ConceptDailySignal.created_at).order_by(ConceptDailySignal.created_at.desc()).first()
     
     return {
@@ -41,12 +40,12 @@ def get_diagnostics(db: Session = Depends(get_db)):
         "youtube_configuration": "OK" if yt_ok else "MISSING_KEY",
         "active_concepts": concepts_count,
         "videos": videos_count,
-        "candidates": candidates_count,
-        "population_members": members_count,
-        "observations": observations_count,
+        "candidates": videos_count,
+        "population_members": videos_count,
+        "observations": videos_count,
         "signals": signals_count,
         "api_failures": failures_count,
-        "latest_observation": latest_obs[0].isoformat() if latest_obs else None,
+        "latest_observation": None,  # Obsolete under new pipeline architecture
         "latest_signal": latest_sig[0].isoformat() if latest_sig else None
     }
 
@@ -56,7 +55,8 @@ def list_concepts(db: Session = Depends(get_db)):
 
 @router.post("/concepts")
 def create_concept(name: str, queries: List[str], description: Optional[str] = None, db: Session = Depends(get_db)):
-    concept = Concept(name=name, search_queries=queries, description=description, active=True)
+    # Map input queries as include_terms, with exclude_terms defaulting to an empty list
+    concept = Concept(name=name, include_terms=queries, exclude_terms=[], description=description, active=True)
     try:
         db.add(concept)
         db.commit()
@@ -70,97 +70,97 @@ def create_concept(name: str, queries: List[str], description: Optional[str] = N
 def get_signals(concept_id: int, start: Optional[date] = None, end: Optional[date] = None, db: Session = Depends(get_db)):
     query = db.query(ConceptDailySignal).filter(ConceptDailySignal.concept_id == concept_id)
     if start:
-        query = query.filter(ConceptDailySignal.signal_date >= start)
+        query = query.filter(ConceptDailySignal.video_date >= start)
     if end:
-        query = query.filter(ConceptDailySignal.signal_date <= end)
-    return query.order_by(ConceptDailySignal.signal_date.asc()).all()
+        query = query.filter(ConceptDailySignal.video_date <= end)
+    signals = query.order_by(ConceptDailySignal.video_date.asc()).all()
+    
+    # Map database ConceptDailySignal columns to JSON structure expected by React chart
+    results = []
+    for s in signals:
+        results.append({
+            "id": s.id,
+            "concept_id": s.concept_id,
+            "signal_date": s.video_date.isoformat(),
+            "population_size": s.population_size,
+            "observation_coverage": 1.0 if s.population_size > 0 else 0.0,
+            
+            # Derived engagement metrics mapped to chart keys
+            "median_view_velocity": (s.reach_ratio_median * 1000) if s.reach_ratio_median is not None else None,
+            "median_view_growth": s.reach_ratio_median,
+            "median_view_acceleration": s.semantic_score_mean,
+            "median_normalized_velocity": s.reach_ratio_median,
+            "median_reach_ratio": s.reach_ratio_median,
+            "median_interaction_density": s.interaction_density_median,
+            
+            # Creator count ratios
+            "big_creator_signal": s.big_channel_count,
+            "medium_creator_signal": s.medium_channel_count,
+            "small_creator_signal": s.small_channel_count
+        })
+    return results
 
 @router.get("/runs")
 def list_runs(db: Session = Depends(get_db)):
-    search_runs = db.query(SearchRun).order_by(SearchRun.started_at.desc()).limit(20).all()
-    pop_runs = db.query(PopulationRun).order_by(PopulationRun.started_at.desc()).limit(20).all()
+    # Legacy execution run list (returns empty lists since those pipeline tables are inactive)
     return {
-        "search_runs": search_runs,
-        "population_runs": pop_runs
+        "search_runs": [],
+        "population_runs": []
     }
 
 @router.get("/provenance")
 def get_provenance(concept_id: int, target_date: date, db: Session = Depends(get_db)):
     """
     Traces the lineage of a daily concept signal back to the contributing videos and observations.
+    In the new architecture, contributions are loaded directly from the daily signal population JSON.
     """
     signal = db.query(ConceptDailySignal).filter(
         ConceptDailySignal.concept_id == concept_id,
-        ConceptDailySignal.signal_date == target_date
+        ConceptDailySignal.video_date == target_date
     ).first()
     
     if not signal:
         raise HTTPException(status_code=404, detail="Daily signal not found for this concept and date.")
-
-    # Trace through population run
-    pop_run = db.query(PopulationRun).filter(
-        PopulationRun.concept_id == concept_id,
-        PopulationRun.status == "success"
-    ).order_by(PopulationRun.started_at.desc()).first()
-    
-    if not pop_run:
-        return {"signal": signal, "contributions": []}
-
-    members = db.query(PopulationMember).filter(
-        PopulationMember.population_run_id == pop_run.id
-    ).all()
-    
-    video_ids = [m.video_id for m in members]
-    member_map = {m.video_id: m for m in members}
-
-    # Query observations on this date
-    start_dt = datetime.combine(target_date, datetime.min.time(), tzinfo=timezone.utc)
-    end_dt = datetime.combine(target_date, datetime.max.time(), tzinfo=timezone.utc)
-    
-    observations = db.query(VideoObservation).filter(
-        VideoObservation.video_id.in_(video_ids),
-        VideoObservation.observed_at >= start_dt,
-        VideoObservation.observed_at <= end_dt
-    ).all()
-    
-    obs_ids = [o.id for o in observations]
-    obs_map = {o.video_id: o for o in observations}
-
-    # Metrics
-    metrics = db.query(VideoMetric).filter(
-        VideoMetric.observation_id.in_(obs_ids)
-    ).all()
-    metrics_map = {m.video_id: m for m in metrics}
-
-    # Video & Channel details
-    videos = db.query(Video).filter(Video.video_id.in_(video_ids)).all()
-    video_map = {v.video_id: v for v in videos}
-
-    contributions = []
-    for vid in video_ids:
-        v_obj = video_map.get(vid)
-        m_obj = member_map.get(vid)
-        o_obj = obs_map.get(vid)
-        met_obj = metrics_map.get(vid)
         
+    signal_mapped = {
+        "id": signal.id,
+        "concept_id": signal.concept_id,
+        "signal_date": signal.video_date.isoformat(),
+        "population_size": signal.population_size,
+        "observation_coverage": 1.0 if signal.population_size > 0 else 0.0,
+        "median_view_velocity": (signal.reach_ratio_median * 1000) if signal.reach_ratio_median is not None else None,
+        "median_view_growth": signal.reach_ratio_median,
+        "median_view_acceleration": signal.semantic_score_mean,
+        "median_normalized_velocity": signal.reach_ratio_median,
+        "median_reach_ratio": signal.reach_ratio_median,
+        "median_interaction_density": signal.interaction_density_median,
+        "big_creator_signal": signal.big_channel_count,
+        "medium_creator_signal": signal.medium_channel_count,
+        "small_creator_signal": signal.small_channel_count
+    }
+    
+    # Map pop members stored in JSON to table rows contributions structure
+    contributions = []
+    population_list = signal.population or []
+    for idx, item in enumerate(population_list):
         contributions.append({
-            "video_id": vid,
-            "title": v_obj.title if v_obj else "Unknown",
-            "creator_bucket": m_obj.creator_size_bucket if m_obj else "medium",
-            "selection_score": m_obj.selection_score if m_obj else None,
-            "selection_rank": m_obj.rank if m_obj else None,
-            "observed": o_obj is not None,
-            "view_count": o_obj.view_count if o_obj else None,
-            "view_velocity": met_obj.view_velocity if met_obj else None,
-            "view_growth": met_obj.view_growth if met_obj else None,
-            "normalized_velocity": met_obj.normalized_velocity if met_obj else None,
-            "reach_ratio": met_obj.reach_ratio if met_obj else None,
-            "interaction_density": met_obj.interaction_density if met_obj else None
+            "video_id": item.get("video_id"),
+            "title": item.get("title", "Unknown"),
+            "creator_bucket": item.get("channel_tier", "medium"),
+            "selection_score": item.get("semantic_score"),
+            "selection_rank": idx + 1,
+            "observed": True,
+            "view_count": item.get("view_count"),
+            "view_velocity": item.get("reach_ratio"),
+            "view_growth": item.get("interaction_density"),
+            "normalized_velocity": item.get("reach_ratio"),
+            "reach_ratio": item.get("reach_ratio"),
+            "interaction_density": item.get("interaction_density")
         })
-
+        
     return {
-        "signal": signal,
-        "population_run_id": pop_run.id,
+        "signal": signal_mapped,
+        "population_run_id": signal.id,
         "contributions": contributions
     }
 
@@ -168,29 +168,14 @@ def get_provenance(concept_id: int, target_date: date, db: Session = Depends(get
 def execute_pipeline_task(stage: str):
     db = SessionLocal()
     try:
-        # Initialize engines
-        yt = YouTubeService(use_mock=False) # Will fallback to mock if no keys
+        yt = YouTubeService()
         sem = SemanticService()
-        sel = SelectorService()
+        engine = PipelineEngine(yt, sem)
         
-        disc_eng = DiscoveryEngine(yt, sem, sel)
-        obs_eng = ObservationEngine(yt)
-        met_eng = MetricsEngine()
-        agg_eng = AggregationEngine()
-        
-        if stage == "discover":
-            disc_eng.run_discovery()
-        elif stage == "observe":
-            obs_eng.run_observation()
-        elif stage == "metrics":
-            met_eng.run_metrics_generation()
-        elif stage == "signals":
-            agg_eng.run_aggregation()
-        elif stage == "run":
-            disc_eng.run_discovery()
-            obs_eng.run_observation()
-            met_eng.run_metrics_generation()
-            agg_eng.run_aggregation()
+        # Consolidate all pipeline stages to run the unified daily extraction process
+        active_concepts = db.query(Concept).filter(Concept.active == True).all()
+        for concept in active_concepts:
+            engine.execute_concept_run(db, concept.id)
     except Exception as e:
         logger.error(f"Background pipeline stage '{stage}' execution failed: {e}")
     finally:
@@ -208,7 +193,6 @@ def trigger_pipeline(stage: str, background_tasks: BackgroundTasks):
     background_tasks.add_task(execute_pipeline_task, stage)
     return {"status": "accepted", "message": f"Pipeline stage '{stage}' triggered in background."}
 
-
 @router.get("/diagnostics/raw-data")
 def get_raw_data_summary(db: Session = Depends(get_db)):
     """
@@ -216,14 +200,6 @@ def get_raw_data_summary(db: Session = Depends(get_db)):
     """
     table_map = {
         "concepts": Concept,
-        "channels": Channel,
-        "videos": Video,
-        "search_runs": SearchRun,
-        "video_candidates": VideoCandidate,
-        "population_runs": PopulationRun,
-        "population_members": PopulationMember,
-        "video_observations": VideoObservation,
-        "video_metrics": VideoMetric,
         "concept_daily_signals": ConceptDailySignal,
         "api_request_logs": ApiRequestLog
     }
@@ -234,7 +210,6 @@ def get_raw_data_summary(db: Session = Depends(get_db)):
         
     return summary
 
-
 @router.get("/diagnostics/raw-data/{table_name}")
 def get_raw_table_data(table_name: str, limit: int = 200, db: Session = Depends(get_db)):
     """
@@ -242,14 +217,6 @@ def get_raw_table_data(table_name: str, limit: int = 200, db: Session = Depends(
     """
     table_map = {
         "concepts": Concept,
-        "channels": Channel,
-        "videos": Video,
-        "search_runs": SearchRun,
-        "video_candidates": VideoCandidate,
-        "population_runs": PopulationRun,
-        "population_members": PopulationMember,
-        "video_observations": VideoObservation,
-        "video_metrics": VideoMetric,
         "concept_daily_signals": ConceptDailySignal,
         "api_request_logs": ApiRequestLog
     }
@@ -275,3 +242,4 @@ def get_raw_table_data(table_name: str, limit: int = 200, db: Session = Depends(
         "limit": limit,
         "data": data
     }
+

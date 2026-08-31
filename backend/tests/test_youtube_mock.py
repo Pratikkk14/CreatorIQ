@@ -1,37 +1,34 @@
 import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, date, timedelta
 from app.core import database
-from app.models.models import (
-    ApiRequestLog, VideoObservation, PopulationMember, 
-    Video, Channel, SearchRun, PopulationRun
-)
-from app.services import YouTubeService, ObservationEngine
+from app.models.models import Concept, ConceptDailySignal
+from app.services.youtube_api import YouTubeService
+from app.services.semantic import SemanticService
+from app.services.pipeline_engine import PipelineEngine
 
 class FailureMockProvider:
-    """Mock provider to simulate success, transient failure (429), and timeout."""
+    """Mock provider simulating partial details failures where V3 and V5 details are missing."""
     def __init__(self):
-        self.call_count = 0
+        pass
 
     def search_videos(self, query, limit, published_after=None, published_before=None):
-        return []
+        return [
+            {"video_id": f"mock_vid_{i}", "channel_id": f"mock_channel_{i}"}
+            for i in range(1, 6)
+        ]
 
     def get_videos_details(self, video_ids):
-        # We simulate the exact scenario from Section 38:
-        # V1: success
-        # V2: success
-        # V3: failure (details not returned)
-        # V4: success
-        # V5: failure (details not returned)
+        # Return details only for V1, V2, V4 (V3 and V5 details are omitted)
         results = []
         for vid in video_ids:
             if vid in ["mock_vid_1", "mock_vid_2", "mock_vid_4"]:
                 results.append({
                     "video_id": vid,
-                    "title": f"Title {vid}",
-                    "description": "Desc",
+                    "title": f"Mock Video Title {vid} - AI Agents complete automation",
+                    "description": "This is a detailed video description of AI agents and workflow automation that is at least 30 characters long.",
                     "channel_id": f"mock_channel_{vid.split('_')[-1]}",
                     "published_at": (datetime.now(timezone.utc) - timedelta(days=2)).isoformat(),
-                    "duration_seconds": 100,
+                    "duration_seconds": 120,
                     "view_count": 500,
                     "like_count": 20,
                     "comment_count": 5
@@ -43,88 +40,36 @@ class FailureMockProvider:
             {"channel_id": cid, "subscriber_count": 1000} for cid in channel_ids
         ]
 
-def test_partial_failures(db_session, mocker):
+def test_partial_metadata_failures(db_session):
     """
-    Verifies Section 38: V1, V2, V4 are successfully observed,
-    failures are recorded for V3, V5, and the job completes without crashing.
+    Verifies that when some video details are missing, they are skipped
+    and tracked in the filter audit log, while surviving videos proceed successfully.
     """
     database.SessionLocal = lambda: db_session
 
     provider = FailureMockProvider()
     yt_service = YouTubeService(use_mock=True, mock_provider=provider)
-    obs_eng = ObservationEngine(yt_service)
+    sem_service = SemanticService()
+    sem_service.compute_similarity = lambda t1, t2: 0.8
 
-    # Setup database records for Foreign Key integrity
-    # 1. Create Channels
-    for i in range(1, 6):
-        db_session.add(Channel(
-            channel_id=f"mock_channel_{i}",
-            title=f"Channel {i}",
-            subscriber_count=1000,
-            first_seen_at=datetime.now(timezone.utc)
-        ))
-    db_session.flush()
+    engine = PipelineEngine(yt_service, sem_service)
+    concept = db_session.query(Concept).first()
+    assert concept is not None
 
-    # 2. Create Videos
-    for i in range(1, 6):
-        db_session.add(Video(
-            video_id=f"mock_vid_{i}",
-            channel_id=f"mock_channel_{i}",
-            title=f"Video {i}",
-            published_at=datetime.now(timezone.utc) - timedelta(days=2),
-            first_discovered_at=datetime.now(timezone.utc),
-            last_seen_at=datetime.now(timezone.utc),
-            status="active"
-        ))
-    db_session.flush()
+    base_date = date(2026, 8, 19)
 
-    # 3. Create Search Run
-    s_run = SearchRun(
-        concept_id=1,
-        started_at=datetime.now(timezone.utc),
-        query="AI agents",
-        requested_limit=50,
-        status="success"
-    )
-    db_session.add(s_run)
-    db_session.flush()
-
-    # 4. Create Population Run
-    p_run = PopulationRun(
-        id=1,
-        concept_id=1,
-        search_run_id=s_run.id,
-        target_size=5,
-        actual_size=5,
-        selection_strategy="percentile_stratified",
-        started_at=datetime.now(timezone.utc),
-        status="success"
-    )
-    db_session.add(p_run)
-    db_session.flush()
-
-    # 5. Create Population Members
-    for i in range(1, 6):
-        db_session.add(PopulationMember(
-            population_run_id=p_run.id,
-            video_id=f"mock_vid_{i}",
-            creator_size_bucket="medium",
-            selected_at=datetime.now(timezone.utc)
-        ))
-    db_session.commit()
-
-    # Run observation
-    res = obs_eng.run_observation(observation_time=datetime.now(timezone.utc))
-    
-    # Assertions
+    res = engine.execute_concept_run(db_session, concept.id, base_date)
     assert res["status"] == "success"
-    
-    # 3 videos (V1, V2, V4) must have observations recorded
-    assert res["observed_count"] == 3
-    
-    obs_v1 = db_session.query(VideoObservation).filter(VideoObservation.video_id == "mock_vid_1").first()
-    assert obs_v1 is not None
-    assert obs_v1.view_count == 500
+    assert res["population_size"] == 3  # V1, V2, V4 survived. V3, V5 details missing
 
-    obs_v3 = db_session.query(VideoObservation).filter(VideoObservation.video_id == "mock_vid_3").first()
-    assert obs_v3 is None  # Omitted due to simulated fetch failure
+    # Check daily signal database state
+    sig = db_session.query(ConceptDailySignal).filter(
+        ConceptDailySignal.concept_id == concept.id,
+        ConceptDailySignal.video_date == base_date - timedelta(days=3)
+    ).first()
+    assert sig is not None
+    assert sig.population_size == 3
+    
+    # Audit log should show 2 rejections due to missing stats
+    audit = sig.filter_audit
+    assert audit["rejections"]["rejected_by_missing_stats"] == 2
