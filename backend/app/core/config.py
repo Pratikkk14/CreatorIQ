@@ -26,6 +26,25 @@ class Settings(BaseSettings):
     app_env: str = Field(alias="APP_ENV", default="development")
     log_level: str = Field(alias="LOG_LEVEL", default="INFO")
     
+    # Ingestion configuration settings
+    scheduler_hour: int = Field(alias="SCHEDULER_HOUR", default=0)
+    scheduler_minute: int = Field(alias="SCHEDULER_MINUTE", default=0)
+    scheduler_timezone: str = Field(alias="SCHEDULER_TIMEZONE", default="UTC")
+    lag_days: int = Field(alias="LAG_DAYS", default=3)
+    search_max_results: int = Field(alias="SEARCH_MAX_RESULTS", default=40)
+    
+    min_views: int = Field(alias="MIN_VIEWS", default=50)
+    min_subscribers: int = Field(alias="MIN_SUBSCRIBERS", default=100)
+    min_duration_seconds: int = Field(alias="MIN_DURATION_SECONDS", default=60)
+    min_description_chars: int = Field(alias="MIN_DESCRIPTION_CHARS", default=30)
+    
+    language: str = Field(alias="LANGUAGE", default="en")
+    
+    embedding_model: str = Field(alias="EMBEDDING_MODEL", default="all-MiniLM-L6-v2")
+    semantic_score_threshold: float = Field(alias="SEMANTIC_SCORE_THRESHOLD", default=0.5)
+    
+    outlier_sigma: float = Field(alias="OUTLIER_SIGMA", default=2.0)
+    
     # Path to YAML configs
     config_dir: str = Field(default=str(BASE_DIR / "config"))
     
