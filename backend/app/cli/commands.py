@@ -8,23 +8,10 @@ except ImportError:
 from app.core.config import settings, get_concepts_config
 from app.core.database import check_db_health, SessionLocal
 from app.core.logging import logger
-from app.models.models import Concept
-from app.services import (
-    YouTubeService, SemanticService, SelectorService, 
-    DiscoveryEngine, ObservationEngine, MetricsEngine, AggregationEngine
-)
-
-def get_services(mock: bool = False):
-    yt = YouTubeService(use_mock=mock)
-    sem = SemanticService()
-    sel = SelectorService()
-    
-    disc = DiscoveryEngine(yt, sem, sel)
-    obs = ObservationEngine(yt)
-    met = MetricsEngine()
-    agg = AggregationEngine()
-    
-    return disc, obs, met, agg
+from app.models.models import Concept, ConceptDailySignal, ApiRequestLog
+from app.services.youtube_api import YouTubeService
+from app.services.semantic import SemanticService
+from app.services.pipeline_engine import PipelineEngine
 
 @click.group()
 def cli():
@@ -32,8 +19,7 @@ def cli():
     pass
 
 @cli.command("diagnostics")
-@click.option("--mock", is_flag=True, help="Run diagnostics using YouTube Mock API")
-def diagnostics(mock):
+def diagnostics():
     """Check system settings, database, and database row tallies."""
     click.echo("Running system diagnostics...")
     db_ok = check_db_health()
@@ -48,19 +34,11 @@ def diagnostics(mock):
         click.echo(f"Active Concepts: {concepts}")
         
         # Query summaries
-        from app.models.models import Video, VideoCandidate, PopulationMember, VideoObservation, ConceptDailySignal, ApiRequestLog
-        click.echo(f"Registered Videos: {db.query(Video).count()}")
-        click.echo(f"Candidates Tracked: {db.query(VideoCandidate).count()}")
-        click.echo(f"Population Members: {db.query(PopulationMember).count()}")
-        click.echo(f"Video Observations: {db.query(VideoObservation).count()}")
         click.echo(f"Concept Signals Generated: {db.query(ConceptDailySignal).count()}")
         click.echo(f"API Failed Requests: {db.query(ApiRequestLog).filter(ApiRequestLog.success == False).count()}")
         
-        latest_obs = db.query(VideoObservation.observed_at).order_by(VideoObservation.observed_at.desc()).first()
-        click.echo(f"Latest Observation: {latest_obs[0] if latest_obs else 'None'}")
-        
-        latest_sig = db.query(ConceptDailySignal.signal_date).order_by(ConceptDailySignal.signal_date.desc()).first()
-        click.echo(f"Latest Concept Signal: {latest_sig[0] if latest_sig else 'None'}")
+        latest_sig = db.query(ConceptDailySignal.video_date).order_by(ConceptDailySignal.video_date.desc()).first()
+        click.echo(f"Latest Concept Signal Date: {latest_sig[0] if latest_sig else 'None'}")
     except Exception as e:
         click.echo(f"Diagnostics Error querying database: {e}", err=True)
     finally:
@@ -84,7 +62,7 @@ def validate_config():
         concepts = get_concepts_config()
         click.echo(f"[OK] Concepts YAML loaded. Found {len(concepts)} concepts:")
         for idx, c in enumerate(concepts):
-            click.echo(f"  {idx+1}. {c['name']} (queries: {c['search_queries']})")
+            click.echo(f"  {idx+1}. {c['name']} (includes: {c.get('include_terms', [])}, excludes: {c.get('exclude_terms', [])})")
             
         # Check DB
         if check_db_health():
@@ -98,96 +76,76 @@ def validate_config():
         click.echo(f"Validation FAILED: {e}", err=True)
         sys.exit(1)
 
+@pipeline_group.command("run")
+@click.option("--mock", is_flag=True, help="Use mock YouTube client")
+@click.option("--date", "target_date_str", type=str, help="Target execution date (YYYY-MM-DD)")
+def run_all(mock, target_date_str):
+    """Execute the daily ingestion pipeline (unified single-run)."""
+    click.echo("=== EXECUTION: Consolidated Ingestion Pipeline Starting ===")
+    
+    t_date = None
+    if target_date_str:
+        try:
+            t_date = date.fromisoformat(target_date_str)
+        except ValueError:
+            click.echo(f"Invalid date format: {target_date_str}. Use YYYY-MM-DD.", err=True)
+            sys.exit(1)
+    else:
+        t_date = datetime.now(timezone.utc).date()
+        
+    db = SessionLocal()
+    try:
+        yt = YouTubeService(use_mock=mock)
+        sem = SemanticService()
+        engine = PipelineEngine(yt, sem)
+        
+        active_concepts = db.query(Concept).filter(Concept.active == True).all()
+        if not active_concepts:
+            click.echo("No active concepts found in the database. Run seed-db first.")
+            sys.exit(1)
+            
+        for concept in active_concepts:
+            click.echo(f"\nProcessing concept '{concept.name}' (ID: {concept.id})...")
+            res = engine.execute_concept_run(db, concept_id=concept.id, execution_date=t_date)
+            click.echo(f"Run Outcome: {res}")
+            
+        click.echo("\n=== EXECUTION: Ingestion Pipeline Complete ===")
+    except Exception as e:
+        click.echo(f"X Pipeline run failed: {e}", err=True)
+        sys.exit(1)
+    finally:
+        db.close()
+
+# Backward compatible alias commands pointing to consolidated pipeline run
 @pipeline_group.command("discover")
 @click.option("--mock", is_flag=True, help="Use mock YouTube client")
-@click.option("--lookback-days", type=int, help="Override lookback window in days")
-def discover(mock, lookback_days):
-    """Run candidate discovery and population selection."""
-    click.echo("Running candidate discovery and population selection...")
-    disc, _, _, _ = get_services(mock)
-    res = disc.run_discovery(lookback_days=lookback_days)
-    click.echo(f"Discovery Result: {res}")
+@click.option("--date", "target_date_str", type=str, help="Target execution date (YYYY-MM-DD)")
+@click.pass_context
+def discover(ctx, mock, target_date_str):
+    """Run discover stage (Alias to consolidated pipeline run)."""
+    ctx.invoke(run_all, mock=mock, target_date_str=target_date_str)
 
 @pipeline_group.command("observe")
 @click.option("--mock", is_flag=True, help="Use mock YouTube client")
-@click.option("--date", "obs_date", type=str, help="Override observation timestamp (ISO format)")
-def observe(mock, obs_date):
-    """Run statistics observation loop for active population."""
-    click.echo("Running video statistics observations...")
-    _, obs, _, _ = get_services(mock)
-    
-    o_time = None
-    if obs_date:
-        o_time = datetime.fromisoformat(obs_date)
-        if o_time.tzinfo is None:
-            o_time = o_time.replace(tzinfo=timezone.utc)
-            
-    res = obs.run_observation(observation_time=o_time)
-    click.echo(f"Observation Result: {res}")
+@click.option("--date", "target_date_str", type=str, help="Target execution date (YYYY-MM-DD)")
+@click.pass_context
+def observe(ctx, mock, target_date_str):
+    """Run observe stage (Alias to consolidated pipeline run)."""
+    ctx.invoke(run_all, mock=mock, target_date_str=target_date_str)
 
 @pipeline_group.command("metrics")
-def metrics():
-    """Generate derived features/metrics from raw observations."""
-    click.echo("Generating derived features...")
-    _, _, met, _ = get_services()
-    res = met.run_metrics_generation()
-    click.echo(f"Metrics Generation Result: {res}")
+@click.option("--date", "target_date_str", type=str, help="Target execution date (YYYY-MM-DD)")
+@click.pass_context
+def metrics(ctx, target_date_str):
+    """Run metrics stage (Alias to consolidated pipeline run)."""
+    ctx.invoke(run_all, mock=False, target_date_str=target_date_str)
 
 @pipeline_group.command("signals")
-@click.option("--date", "sig_date", type=str, help="Target date for aggregation (YYYY-MM-DD)")
-def signals(sig_date):
-    """Aggregate video metrics into concept daily signals."""
-    click.echo("Generating concept daily signals...")
-    _, _, _, agg = get_services()
-    
-    t_date = None
-    if sig_date:
-        t_date = date.fromisoformat(sig_date)
-        
-    res = agg.run_aggregation(target_date=t_date)
-    click.echo(f"Aggregation Result: {res}")
-
-@pipeline_group.command("run")
-@click.option("--mock", is_flag=True, help="Use mock YouTube client")
-@click.option("--lookback-days", type=int, help="Override lookback window in days")
-@click.option("--date", "target_date_str", type=str, help="Target date for the run (YYYY-MM-DD)")
-def run_all(mock, lookback_days, target_date_str):
-    """Execute all pipeline stages sequentially."""
-    click.echo("=== EXECUTION: Pipeline Run Starting ===")
-    disc, obs, met, agg = get_services(mock)
-    
-    # 1. Discover
-    click.echo("\n--- STAGE 1: Discover ---")
-    d_res = disc.run_discovery(lookback_days=lookback_days)
-    click.echo(f"Discovery: {d_res}")
-    if d_res.get("status") == "failed":
-        click.echo("Pipeline aborted due to Discovery failure.")
-        sys.exit(1)
-        
-    # 2. Observe
-    click.echo("\n--- STAGE 2: Observe ---")
-    o_time = None
-    if target_date_str:
-        # If running for a specific date, align observations with that date's midday
-        target_d = date.fromisoformat(target_date_str)
-        o_time = datetime.combine(target_d, datetime.now(timezone.utc).time(), tzinfo=timezone.utc)
-    o_res = obs.run_observation(observation_time=o_time)
-    click.echo(f"Observation: {o_res}")
-    
-    # 3. Metrics
-    click.echo("\n--- STAGE 3: Derived Metrics ---")
-    m_res = met.run_metrics_generation()
-    click.echo(f"Metrics: {m_res}")
-    
-    # 4. Signals
-    click.echo("\n--- STAGE 4: Concept Signals ---")
-    t_date = None
-    if target_date_str:
-        t_date = date.fromisoformat(target_date_str)
-    a_res = agg.run_aggregation(target_date=t_date)
-    click.echo(f"Aggregation: {a_res}")
-    
-    click.echo("\n=== EXECUTION: Pipeline Run Complete ===")
+@click.option("--date", "target_date_str", type=str, help="Target execution date (YYYY-MM-DD)")
+@click.pass_context
+def signals(ctx, target_date_str):
+    """Run signals stage (Alias to consolidated pipeline run)."""
+    ctx.invoke(run_all, mock=False, target_date_str=target_date_str)
 
 @cli.command("reset-db")
 @click.option("--yes", is_flag=True, help="Confirm database reset without confirmation prompt")
@@ -206,28 +164,21 @@ def reset_db(yes):
             PopulationMember, PopulationRun, VideoCandidate, SearchRun, Video, Channel, Concept
         )
         
-        # Safe deletion sequence respecting foreign key constraints
-        click.echo("Clearing logs and signals...")
+        click.echo("Clearing api logs and signals...")
         db.query(ApiRequestLog).delete()
         db.query(ConceptDailySignal).delete()
         
-        click.echo("Clearing metrics and observations...")
+        click.echo("Clearing video statistics and cohorts...")
         db.query(VideoMetric).delete()
         db.query(VideoObservation).delete()
-        
-        click.echo("Clearing population cohorts...")
         db.query(PopulationMember).delete()
         db.query(PopulationRun).delete()
-        
-        click.echo("Clearing candidates and search runs...")
         db.query(VideoCandidate).delete()
         db.query(SearchRun).delete()
-        
-        click.echo("Clearing videos and channels...")
         db.query(Video).delete()
         db.query(Channel).delete()
         
-        click.echo("Clearing trend concepts...")
+        click.echo("Clearing concepts...")
         db.query(Concept).delete()
         
         db.commit()
@@ -244,9 +195,6 @@ def seed_db():
     click.echo("Seeding database concepts from concepts.yaml...")
     db = SessionLocal()
     try:
-        from app.models.models import Concept
-        from app.core.config import get_concepts_config
-        
         existing = db.query(Concept).count()
         if existing > 0:
             click.echo(f"Concepts table already has {existing} entries. Skipping seeding.")
@@ -258,7 +206,8 @@ def seed_db():
                 name=c_data["name"],
                 description=c_data.get("description", ""),
                 active=c_data.get("active", True),
-                search_queries=c_data["search_queries"]
+                include_terms=c_data["include_terms"],
+                exclude_terms=c_data.get("exclude_terms", [])
             )
             db.add(concept)
         db.commit()
@@ -269,10 +218,46 @@ def seed_db():
     finally:
         db.close()
 
+@cli.command("recreate-db")
+@click.option("--yes", is_flag=True, help="Confirm database drop and recreation without prompt")
+def recreate_db(yes):
+    """Drop all tables and recreate them with the new schema."""
+    if not yes:
+        if not click.confirm("WARNING: This will drop ALL database tables and recreate them. Are you sure?"):
+            click.echo("Aborted.")
+            return
+            
+    click.echo("Dropping all tables...")
+    from app.models.base import Base
+    from app.core.database import engine
+    from sqlalchemy import text
+    try:
+        # Execute DROP CASCADE on any old/obsolete tables first to clear legacy foreign keys
+        with engine.begin() as conn:
+            conn.execute(text("""
+                DROP TABLE IF EXISTS channels, videos, search_runs, video_candidates, 
+                population_runs, population_members, video_observations, video_metrics CASCADE;
+            """))
+            
+        from app.models.models import (
+            ApiRequestLog, ConceptDailySignal, Concept
+        )
+        Base.metadata.drop_all(bind=engine)
+        click.echo("[OK] Tables dropped.")
+        
+        click.echo("Creating tables with new schema...")
+        Base.metadata.create_all(bind=engine)
+        click.echo("[OK] Tables recreated successfully.")
+    except Exception as e:
+        click.echo(f"X Failed to recreate database: {e}", err=True)
+
+
 cli.add_command(diagnostics)
 cli.add_command(pipeline_group)
 cli.add_command(reset_db)
 cli.add_command(seed_db)
+cli.add_command(recreate_db)
 
 if __name__ == "__main__":
     cli()
+
