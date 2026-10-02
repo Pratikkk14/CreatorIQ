@@ -62,3 +62,8 @@ Old_System/
 *.sqlite
 *.sqlite3
 
+# Docs
+docs_Pratik/
+
+#refernece repo
+Yash_creatorIQ/
