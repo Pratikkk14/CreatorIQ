@@ -27,10 +27,11 @@ services:
         value: "30"
 
   # 2. React / Vite Frontend Static Site
-  - type: static_site
+  - type: web
     name: creatoriq-frontend
+    runtime: static
     buildCommand: npm install && npm run build
-    publishDir: dist
+    staticPublishPath: dist
     rootDir: frontend
     envVars:
       - key: VITE_API_BASE_URL
