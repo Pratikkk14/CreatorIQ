@@ -1,6 +1,7 @@
 import pytest
 from datetime import datetime, timezone, date, timedelta
 from app.core import database
+from app.core.config import settings
 from app.models.models import Concept, ConceptDailySignal
 from app.services.youtube_api import YouTubeService
 from app.services.semantic import SemanticService
@@ -65,7 +66,7 @@ def test_partial_metadata_failures(db_session):
     # Check daily signal database state
     sig = db_session.query(ConceptDailySignal).filter(
         ConceptDailySignal.concept_id == concept.id,
-        ConceptDailySignal.video_date == base_date - timedelta(days=3)
+        ConceptDailySignal.video_date == base_date - timedelta(days=settings.lag_days)
     ).first()
     assert sig is not None
     assert sig.population_size == 3
