@@ -1,16 +1,63 @@
-# React + Vite
+# CreatorIQ — Real-Time Trend Intelligence Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+This directory contains the Vite + React single-page application (SPA) dashboard for monitoring real-time trend ingestion pipelines, inspecting concept signals, and tracking populated video entries for **CreatorIQ**.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🖥️ Dashboard Overview & Features
 
-## React Compiler
+The frontend provides an interactive workspace built with modern UI design principles, glassmorphism card surfaces, and dynamic charts:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. **Real-Time 3x/Day Ingestion Controls**:
+   - Status indicators displaying DB connectivity, active tracked concepts, and generated daily signals.
+   - One-click triggers to execute manual background ingestion runs.
 
-## Expanding the Oxlint configuration
+2. **Top Populated Entries Leaderboard**:
+   - Real-time leaderboard table displaying top video entries populated in recent pipeline runs.
+   - Shows video titles with direct YouTube links, concept category badges, channel tiers (`BIG`, `MEDIUM`, `SMALL`), reach ratios, and visual **Trend Score progress gauges** (0–100 scale).
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+3. **Concept Details & Lineage Provenance**:
+   - Interactive trend signal graphs (Reach Ratio, Interaction Density, Semantic Relevance).
+   - Video-level lineage drilldown showing exact contributor rankings and per-video metrics.
+
+4. **Diagnostics & Raw Data Inspector**:
+   - View database table row counts and raw JSON payloads (`concepts`, `concept_daily_signals`, `api_request_logs`).
+
+---
+
+## 📁 Project Structure
+
+```text
+frontend/
+├── src/
+│   ├── components/
+│   │   ├── Dashboard.jsx       # Real-time leaderboard, stats, and concept creation
+│   │   ├── ConceptDetail.jsx   # Interactive trend charts and provenance table
+│   │   ├── Diagnostics.jsx     # System health and pipeline execution controls
+│   │   └── ViewData.jsx        # Raw database table payload inspector
+│   ├── services/
+│   │   └── api.js              # API client connecting to FastAPI backend
+│   ├── App.jsx                 # Sidebar navigation & tab router
+│   ├── App.css                 # Dark theme design system & tokens
+│   └── main.jsx                # React app entry point
+├── package.json
+└── vite.config.js
+```
+
+---
+
+## 🚀 Getting Started
+
+### 1. Install Dependencies
+```bash
+npm install
+```
+
+### 2. Configure Backend API URL
+By default, `src/services/api.js` points to `http://localhost:8000/api`. If hosting the backend remotely, update `API_BASE_URL` in `src/services/api.js`.
+
+### 3. Run Development Server
+```bash
+npm run dev
+```
+Open `http://localhost:5173` in your browser.
