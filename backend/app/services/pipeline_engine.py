@@ -231,11 +231,11 @@ class PipelineEngine:
 
         # 5. Engagement Metrics & Composite Trend Score Calculation
         for v in processed_videos:
-            subs = v["subscriber_count"]
-            views = v["view_count"]
-            likes = v["like_count"]
-            comments = v["comment_count"]
-            score = v["semantic_score"]
+            subs = v.get("subscriber_count") or 0
+            views = v.get("view_count") or 0
+            likes = v.get("like_count") or 0
+            comments = v.get("comment_count") or 0
+            score = v.get("semantic_score") or 0.0
 
             # Safe Division: Reach ratio = (view count / subscribers) / 100
             rr = float((views / subs) / 100) if subs > 0 else 0.0
