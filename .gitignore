@@ -44,26 +44,16 @@ Thumbs.db
 *.swp
 *.swo
 
-# Agent Specific
-hardcoded_values_todo.md
-BrainStorming/stratch.md
-
-# Project specific binaries (to keep repo clean)
-*.docx
-*.pdf
-*.zip
-*.tar.gz
-
-#Current Old System that has to be replaced
-Old_System/
-
 # SQLite databases
 *.db
 *.sqlite
 *.sqlite3
 
-# Docs
-docs_Pratik/
+# Project specific binaries
+*.docx
+*.pdf
+*.zip
+*.tar.gz
 
-#refernece repo
-Yash_creatorIQ/
+# Miscellaneous / Unrelated System Folders & Archives
+Miscellaneous/
