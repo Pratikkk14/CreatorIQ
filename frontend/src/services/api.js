@@ -5,24 +5,21 @@ const API_BASE_URL = "http://localhost:8000/api";
 const MOCK_DIAGNOSTICS = {
   database: "OK",
   youtube_configuration: "OK",
-  active_concepts: 1,
-  videos: 5,
-  candidates: 12,
-  population_members: 5,
-  observations: 15,
-  signals: 3,
+  active_concepts: 10,
+  videos: 0,
+  signals: 0,
   api_failures: 0,
-  latest_observation: new Date().toISOString(),
   latest_signal: new Date().toISOString()
 };
 
 const MOCK_CONCEPTS = [
   {
-    id: 1,
-    name: "AI Agents",
-    description: "Monitors agentic AI workflows, frameworks, and LLM automation tools",
+    id: "10000000-0000-0000-0000-000000000001",
+    name: "Diet",
+    description: "Nutrition, meal plans, calorie surplus/deficit",
     active: true,
-    search_queries: ["AI agents", "agentic AI", "AI automation"]
+    include_terms: ["fitness diet", "gym nutrition"],
+    exclude_terms: ["recipe non-fitness"]
   }
 ];
 
@@ -190,19 +187,11 @@ export const apiService = {
       const resp = await fetch(`${API_BASE_URL}/diagnostics/raw-data`);
       return await handleResponse(resp);
     } catch (err) {
-      console.warn("Raw data summary API failed, falling back to mock counts.", err);
+      console.warn("Raw data summary API failed, falling back to active table counts.", err);
       return {
-        concepts: 1,
-        channels: 5,
-        videos: 5,
-        search_runs: 1,
-        video_candidates: 12,
-        population_runs: 1,
-        population_members: 5,
-        video_observations: 15,
-        video_metrics: 15,
-        concept_daily_signals: 3,
-        api_request_logs: 25
+        concepts: 10,
+        concept_daily_signals: 0,
+        api_request_logs: 0
       };
     }
   },
@@ -212,31 +201,12 @@ export const apiService = {
       const resp = await fetch(`${API_BASE_URL}/diagnostics/raw-data/${tableName}?limit=${limit}`);
       return await handleResponse(resp);
     } catch (err) {
-      console.warn(`Raw data API for table ${tableName} failed, falling back to mock rows.`, err);
-      const mockRows = [];
-      const count = 5;
-      for (let i = 1; i <= count; i++) {
-        mockRows.push({
-          id: i,
-          video_id: `mock_vid_${i}`,
-          channel_id: `mock_channel_${i}`,
-          title: `Mock Video Title ${i}`,
-          subscriber_count: i * 50000,
-          views: i * 1000,
-          created_at: new Date().toISOString(),
-          requested_at: new Date().toISOString(),
-          success: true,
-          api_name: "youtube",
-          endpoint: "search",
-          operation: "list",
-          status: "active"
-        });
-      }
+      console.warn(`Raw data API for table ${tableName} failed.`, err);
       return {
         table: tableName,
-        count: mockRows.length,
+        count: 0,
         limit,
-        data: mockRows
+        data: []
       };
     }
   }
