@@ -1,0 +1,47 @@
+services:
+  # 1. FastAPI Backend Web Service
+  - type: web
+    name: creatoriq-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:api_app --host 0.0.0.0 --port $PORT
+    rootDir: backend
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: creatoriq-db
+          property: connectionString
+      - key: Youtube_API_KEY
+        sync: false
+      - key: Gemini_API_Key
+        sync: false
+      - key: APP_ENV
+        value: production
+      - key: LAG_DAYS
+        value: "1"
+      - key: MIN_SUBSCRIBERS
+        value: "50"
+      - key: MIN_VIEWS
+        value: "10"
+      - key: MIN_DURATION_SECONDS
+        value: "30"
+
+  # 2. React / Vite Frontend Static Site
+  - type: static
+    name: creatoriq-frontend
+    buildCommand: npm install && npm run build
+    publishDir: dist
+    rootDir: frontend
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: creatoriq-backend
+          property: url
+          suffix: /api
+
+databases:
+  # 3. Managed PostgreSQL Database
+  - name: creatoriq-db
+    databaseName: creatoriq
+    user: creatoriq_user
