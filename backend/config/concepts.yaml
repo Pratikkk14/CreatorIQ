@@ -11,8 +11,9 @@ concepts:
       - "meal prep fitness"
       - "calorie deficit workout"
     exclude_terms:
-      - "recipe non-fitness"
-      - "gaming"
+      - "supplement review"
+      - "whey protein review"
+      - "pre workout review"
 
   - id: "10000000-0000-0000-0000-000000000002"
     name: "Muscle training"
@@ -25,8 +26,9 @@ concepts:
       - "weight lifting routine"
       - "muscle growth exercises"
     exclude_terms:
-      - "gaming"
-      - "vlog"
+      - "calisthenics bodyweight"
+      - "posing routine stage"
+      - "gym humor meme"
 
   - id: "10000000-0000-0000-0000-000000000003"
     name: "Calisthenics"
@@ -39,8 +41,9 @@ concepts:
       - "handstand pushups"
       - "muscle up tutorial"
     exclude_terms:
-      - "gaming"
-      - "music video"
+      - "heavy barbell bench"
+      - "deadlift max attempt"
+      - "dumbbell curl hypertrophy"
 
   - id: "10000000-0000-0000-0000-000000000004"
     name: "Gym Entertainment"
@@ -53,8 +56,9 @@ concepts:
       - "fitness challenge"
       - "gym meme workout"
     exclude_terms:
-      - "news"
-      - "politics"
+      - "form tutorial guide"
+      - "bench press technique"
+      - "exercise form analysis"
 
   - id: "10000000-0000-0000-0000-000000000005"
     name: "Gym time management"
@@ -67,8 +71,9 @@ concepts:
       - "quick gym session"
       - "30 minute workout"
     exclude_terms:
-      - "office productivity"
-      - "study tips"
+      - "2 hour workout vlog"
+      - "full day of eating"
+      - "gym equipment review"
 
   - id: "10000000-0000-0000-0000-000000000006"
     name: "Protein intake strategies"
@@ -81,8 +86,9 @@ concepts:
       - "whey protein timing"
       - "high protein meals"
     exclude_terms:
-      - "pharma"
-      - "chemistry"
+      - "pre workout supplement review"
+      - "fat loss cardio routine"
+      - "gym equipment review"
 
   - id: "10000000-0000-0000-0000-000000000007"
     name: "Bodybuilding"
@@ -95,8 +101,9 @@ concepts:
       - "bodybuilding motivation"
       - "stage prep fitness"
     exclude_terms:
-      - "gaming"
-      - "movie review"
+      - "powerlifting meet max"
+      - "strongman log press"
+      - "gym humor meme"
 
   - id: "10000000-0000-0000-0000-000000000008"
     name: "Gym reviews"
@@ -109,8 +116,9 @@ concepts:
       - "supplement review fitness"
       - "lifting shoes review"
     exclude_terms:
-      - "car review"
-      - "tech review"
+      - "bench press form guide"
+      - "squat technique tutorial"
+      - "full workout vlog"
 
   - id: "10000000-0000-0000-0000-000000000009"
     name: "How to do exercises"
@@ -123,8 +131,9 @@ concepts:
       - "squat exercise technique"
       - "deadlift form guide"
     exclude_terms:
-      - "math tutorial"
-      - "coding"
+      - "gym meme funny"
+      - "lifting shoes review"
+      - "gym equipment tour"
 
   - id: "10000000-0000-0000-0000-000000000010"
     name: "How to improve yourself"
@@ -137,5 +146,6 @@ concepts:
       - "workout discipline guide"
       - "self improvement gym"
     exclude_terms:
-      - "crypto"
-      - "trading"
+      - "financial independence passive income"
+      - "stock market investing"
+      - "coding programming tutorial"

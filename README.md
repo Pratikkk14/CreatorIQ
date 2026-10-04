@@ -13,20 +13,26 @@
 
 The objective of this project is to provide a robust, automated **Real-Time YouTube Trend Intelligence Engine** that operates continuously (scheduled 3 times daily at 00:00, 08:00, 16:00 UTC) to identify rising video concepts, quantify creator performance, and produce normalized daily trend signals.
 
-Rather than relying on static creator lists, this pipeline dynamically evaluates real-time YouTube candidate populations for **10 tracked Fitness concepts**:
+Rather than relying on static creator lists, this pipeline dynamically evaluates real-time YouTube candidate populations for **10 tracked Fitness concepts** defined in [`concepts.yaml`](file:///d:/Projects/Desktop/agy2-projects/CreatorIQ/backend/config/concepts.yaml):
 
-| # | Concept Name | Focus Area |
-| :--- | :--- | :--- |
-| 1 | **Diet** | Nutrition, meal plans, calorie deficit/surplus, gym meal prep |
-| 2 | **Muscle training** | Hypertrophy routines, resistance training, weight lifting, muscle growth |
-| 3 | **Calisthenics** | Bodyweight workouts, gymnastics strength, muscle-ups, pull-up tutorials |
-| 4 | **Gym Entertainment** | Gym humor, fitness challenges, PR reactions, workout memes |
-| 5 | **Gym time management** | Workout efficiency, busy gym routines, quick 30-min sessions |
-| 6 | **Protein intake strategies** | Whey protein timing, daily protein requirements, recovery nutrition |
-| 7 | **Bodybuilding** | Competitive physique, posing routines, muscle symmetry, stage prep |
-| 8 | **Gym reviews** | Commercial gym tours, equipment reviews, supplement reviews, lifting gear |
-| 9 | **How to do exercises** | Bench press form tutorials, squat technique, deadlift form guides |
-| 10 | **How to improve yourself** | Fitness mindset, physical transformation guides, workout discipline |
+| # | Concept Name | Description | Include Terms (YouTube Search Query) | Targeted Exclude Terms (Domain Separation) |
+| :-: | :--- | :--- | :--- | :--- |
+| **1** | **Diet** | Nutrition, meal plans, calorie surplus/deficit, and dieting strategies | `"fitness diet"`, `"gym nutrition"`, `"meal prep fitness"`, `"calorie deficit workout"` | `"-supplement review"`, `"-whey protein review"`, `"-pre workout review"` |
+| **2** | **Muscle training** | Hypertrophy, resistance training, weight lifting, and muscle building workouts | `"muscle training"`, `"hypertrophy workout"`, `"weight lifting routine"`, `"muscle growth exercises"` | `"-calisthenics bodyweight"`, `"-posing routine stage"`, `"-gym humor meme"` |
+| **3** | **Calisthenics** | Bodyweight training, gymnastics strength, muscle-ups, and pull-ups | `"calisthenics"`, `"bodyweight workout"`, `"handstand pushups"`, `"muscle up tutorial"` | `"-heavy barbell bench"`, `"-deadlift max attempt"`, `"-dumbbell curl hypertrophy"` |
+| **4** | **Gym Entertainment** | Gym humor, fitness challenges, PR reactions, and fitness creator entertainment | `"gym entertainment"`, `"gym humor"`, `"fitness challenge"`, `"gym meme workout"` | `"-form tutorial guide"`, `"-bench press technique"`, `"-exercise form analysis"` |
+| **5** | **Gym time management** | Workout efficiency, busy gym routines, rest interval optimization, and quick workouts | `"gym time management"`, `"efficient workout routine"`, `"quick gym session"`, `"30 minute workout"` | `"-2 hour workout vlog"`, `"-full day of eating"`, `"-gym equipment review"` |
+| **6** | **Protein intake strategies** | Whey protein, daily protein targets, protein timing, and muscle recovery nutrition | `"protein intake strategies"`, `"daily protein requirement"`, `"whey protein timing"`, `"high protein meals"` | `"-pre workout supplement review"`, `"-fat loss cardio routine"`, `"-gym equipment review"` |
+| **7** | **Bodybuilding** | Competitive bodybuilding, posing routines, muscle symmetry, and prep guides | `"bodybuilding"`, `"classic physique workout"`, `"bodybuilding motivation"`, `"stage prep fitness"` | `"-powerlifting meet max"`, `"-strongman log press"`, `"-gym humor meme"` |
+| **8** | **Gym reviews** | Gym equipment reviews, commercial gym tours, supplement reviews, and lifting gear | `"gym review"`, `"gym equipment review"`, `"supplement review fitness"`, `"lifting shoes review"` | `"-bench press form guide"`, `"-squat technique tutorial"`, `"-full workout vlog"` |
+| **9** | **How to do exercises** | Exercise form tutorials, bench press technique, squat form tips, and injury prevention | `"how to do exercises"`, `"bench press form tutorial"`, `"squat exercise technique"`, `"deadlift form guide"` | `"-gym meme funny"`, `"-lifting shoes review"`, `"-gym equipment tour"` |
+| **10** | **How to improve yourself** | Fitness mindset, discipline, physical transformation guides, and workout consistency | `"how to improve yourself fitness"`, `"fitness transformation mindset"`, `"workout discipline guide"`, `"self improvement gym"` | `"-financial independence passive income"`, `"-stock market investing"`, `"-coding programming tutorial"` |
+
+### 🎯 Targeted Domain Separation Rationale
+Exclusion terms are explicitly engineered to **prevent topic overlap between adjacent fitness niches**:
+- **Diet vs. Protein Intake & Reviews**: `Diet` excludes `"supplement review"` and `"whey protein review"` so product reviews land in `Gym reviews` and supplement specifics land in `Protein intake strategies`.
+- **Bodybuilding vs. Powerlifting**: `Bodybuilding` excludes `"powerlifting meet max"` and `"strongman"` to separate aesthetic stage prep from 1RM max strength lifting.
+- **Form Guides vs. Entertainment**: `How to do exercises` excludes `"gym meme funny"` to keep technical form tutorials separate from comedic entertainment content.
 
 ---
 
