@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     scheduler_hour: int = Field(alias="SCHEDULER_HOUR", default=0)
     scheduler_minute: int = Field(alias="SCHEDULER_MINUTE", default=0)
     scheduler_timezone: str = Field(alias="SCHEDULER_TIMEZONE", default="UTC")
-    lag_days: int = Field(alias="LAG_DAYS", default=3)
+    lag_days: int = Field(alias="LAG_DAYS", default=0)
     search_max_results: int = Field(alias="SEARCH_MAX_RESULTS", default=40)
     
     min_views: int = Field(alias="MIN_VIEWS", default=50)

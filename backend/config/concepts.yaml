@@ -1,12 +1,141 @@
+category: "Fitness"
 concepts:
-  - name: "AI Agents"
-    description: "Monitors agentic AI workflows, frameworks, and LLM automation tools"
+  - id: "10000000-0000-0000-0000-000000000001"
+    name: "Diet"
+    category: "Fitness"
+    description: "Nutrition, meal plans, calorie surplus/deficit, and dieting strategies"
     active: true
     include_terms:
-      - "AI agents"
-      - "agentic AI"
-      - "AI automation"
+      - "fitness diet"
+      - "gym nutrition"
+      - "meal prep fitness"
+      - "calorie deficit workout"
+    exclude_terms:
+      - "recipe non-fitness"
+      - "gaming"
+
+  - id: "10000000-0000-0000-0000-000000000002"
+    name: "Muscle training"
+    category: "Fitness"
+    description: "Hypertrophy, resistance training, weight lifting, and muscle building workouts"
+    active: true
+    include_terms:
+      - "muscle training"
+      - "hypertrophy workout"
+      - "weight lifting routine"
+      - "muscle growth exercises"
     exclude_terms:
       - "gaming"
-      - "entertainment"
       - "vlog"
+
+  - id: "10000000-0000-0000-0000-000000000003"
+    name: "Calisthenics"
+    category: "Fitness"
+    description: "Bodyweight training, gymnastics strength, muscle-ups, and pull-ups"
+    active: true
+    include_terms:
+      - "calisthenics"
+      - "bodyweight workout"
+      - "handstand pushups"
+      - "muscle up tutorial"
+    exclude_terms:
+      - "gaming"
+      - "music video"
+
+  - id: "10000000-0000-0000-0000-000000000004"
+    name: "Gym Entertainment"
+    category: "Fitness"
+    description: "Gym humor, fitness challenges, PR reactions, and fitness creator entertainment"
+    active: true
+    include_terms:
+      - "gym entertainment"
+      - "gym humor"
+      - "fitness challenge"
+      - "gym meme workout"
+    exclude_terms:
+      - "news"
+      - "politics"
+
+  - id: "10000000-0000-0000-0000-000000000005"
+    name: "Gym time management"
+    category: "Fitness"
+    description: "Workout efficiency, busy gym routines, rest interval optimization, and quick workouts"
+    active: true
+    include_terms:
+      - "gym time management"
+      - "efficient workout routine"
+      - "quick gym session"
+      - "30 minute workout"
+    exclude_terms:
+      - "office productivity"
+      - "study tips"
+
+  - id: "10000000-0000-0000-0000-000000000006"
+    name: "Protein intake strategies"
+    category: "Fitness"
+    description: "Whey protein, daily protein targets, protein timing, and muscle recovery nutrition"
+    active: true
+    include_terms:
+      - "protein intake strategies"
+      - "daily protein requirement"
+      - "whey protein timing"
+      - "high protein meals"
+    exclude_terms:
+      - "pharma"
+      - "chemistry"
+
+  - id: "10000000-0000-0000-0000-000000000007"
+    name: "Bodybuilding"
+    category: "Fitness"
+    description: "Competitive bodybuilding, posing routines, muscle symmetry, and prep guides"
+    active: true
+    include_terms:
+      - "bodybuilding"
+      - "classic physique workout"
+      - "bodybuilding motivation"
+      - "stage prep fitness"
+    exclude_terms:
+      - "gaming"
+      - "movie review"
+
+  - id: "10000000-0000-0000-0000-000000000008"
+    name: "Gym reviews"
+    category: "Fitness"
+    description: "Gym equipment reviews, commercial gym tours, supplement reviews, and lifting gear"
+    active: true
+    include_terms:
+      - "gym review"
+      - "gym equipment review"
+      - "supplement review fitness"
+      - "lifting shoes review"
+    exclude_terms:
+      - "car review"
+      - "tech review"
+
+  - id: "10000000-0000-0000-0000-000000000009"
+    name: "How to do exercises"
+    category: "Fitness"
+    description: "Exercise form tutorials, bench press technique, squat form tips, and injury prevention"
+    active: true
+    include_terms:
+      - "how to do exercises"
+      - "bench press form tutorial"
+      - "squat exercise technique"
+      - "deadlift form guide"
+    exclude_terms:
+      - "math tutorial"
+      - "coding"
+
+  - id: "10000000-0000-0000-0000-000000000010"
+    name: "How to improve yourself"
+    category: "Fitness"
+    description: "Fitness mindset, discipline, physical transformation guides, and workout consistency"
+    active: true
+    include_terms:
+      - "how to improve yourself fitness"
+      - "fitness transformation mindset"
+      - "workout discipline guide"
+      - "self improvement gym"
+    exclude_terms:
+      - "crypto"
+      - "trading"

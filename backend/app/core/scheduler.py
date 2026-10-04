@@ -47,20 +47,20 @@ def start_scheduler():
     except Exception:
         pass
     
-    # Configure daily cron using the configured hour, minute, and timezone settings
+    # Configure real-time cron trigger to run 3 times a day (00:00, 08:00, 16:00 UTC)
     scheduler.add_job(
         run_pipeline_for_all_active_concepts,
         trigger="cron",
-        hour=settings.scheduler_hour,
+        hour="0,8,16",
         minute=settings.scheduler_minute,
         timezone=settings.scheduler_timezone,
-        id="daily_trend_ingestion_pipeline"
+        id="realtime_trend_ingestion_pipeline"
     )
     
     scheduler.start()
     logger.info(
         f"Background cron scheduler successfully started. "
-        f"Ingestion job configured to run daily at: {settings.scheduler_hour:02d}:{settings.scheduler_minute:02d} {settings.scheduler_timezone}"
+        f"Real-time ingestion job configured to run 3x daily (00:00, 08:00, 16:00 {settings.scheduler_timezone})."
     )
 
 def stop_scheduler():
