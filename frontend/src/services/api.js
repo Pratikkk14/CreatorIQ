@@ -153,6 +153,16 @@ export const apiService = {
     }
   },
 
+  getLatestEntries: async (limit = 20) => {
+    try {
+      const resp = await fetch(`${API_BASE_URL}/latest-entries?limit=${limit}`);
+      return await handleResponse(resp);
+    } catch (err) {
+      console.warn("Latest entries API failed, returning empty array.", err);
+      return [];
+    }
+  },
+
   getProvenance: async (conceptId, dateStr) => {
     try {
       const resp = await fetch(`${API_BASE_URL}/provenance?concept_id=${conceptId}&target_date=${dateStr}`);
