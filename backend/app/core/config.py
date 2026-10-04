@@ -30,18 +30,18 @@ class Settings(BaseSettings):
     scheduler_hour: int = Field(alias="SCHEDULER_HOUR", default=0)
     scheduler_minute: int = Field(alias="SCHEDULER_MINUTE", default=0)
     scheduler_timezone: str = Field(alias="SCHEDULER_TIMEZONE", default="UTC")
-    lag_days: int = Field(alias="LAG_DAYS", default=0)
-    search_max_results: int = Field(alias="SEARCH_MAX_RESULTS", default=40)
+    lag_days: int = Field(alias="LAG_DAYS", default=1)
+    search_max_results: int = Field(alias="SEARCH_MAX_RESULTS", default=50)
     
-    min_views: int = Field(alias="MIN_VIEWS", default=50)
+    min_views: int = Field(alias="MIN_VIEWS", default=0)
     min_subscribers: int = Field(alias="MIN_SUBSCRIBERS", default=100)
-    min_duration_seconds: int = Field(alias="MIN_DURATION_SECONDS", default=60)
+    min_duration_seconds: int = Field(alias="MIN_DURATION_SECONDS", default=120)
     min_description_chars: int = Field(alias="MIN_DESCRIPTION_CHARS", default=30)
     
     language: str = Field(alias="LANGUAGE", default="en")
     
     embedding_model: str = Field(alias="EMBEDDING_MODEL", default="all-MiniLM-L6-v2")
-    semantic_score_threshold: float = Field(alias="SEMANTIC_SCORE_THRESHOLD", default=0.5)
+    semantic_score_threshold: float = Field(alias="SEMANTIC_SCORE_THRESHOLD", default=0.3)
     
     outlier_sigma: float = Field(alias="OUTLIER_SIGMA", default=2.0)
     

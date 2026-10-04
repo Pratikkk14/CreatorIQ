@@ -29,12 +29,16 @@ class YouTubeService:
         self.mock_provider = mock_provider
         self.client = None
         
-        if not use_mock and settings.youtube_api_key:
-            try:
-                self.client = build("youtube", "v3", developerKey=settings.youtube_api_key)
-            except Exception as e:
-                logger.error(f"Failed to initialize real YouTube client: {e}. Falling back to mock.")
-                self.use_mock = True
+        if not use_mock:
+            if settings.youtube_api_key:
+                try:
+                    self.client = build("youtube", "v3", developerKey=settings.youtube_api_key)
+                except Exception as e:
+                    logger.error(f"Failed to initialize real YouTube client: {e}")
+                    raise e
+            else:
+                logger.error("YouTube API key is missing. Set Youtube_API_KEY in environment or .env file.")
+                raise ValueError("YouTube API key is missing. Real-time pipeline requires a valid Youtube_API_KEY.")
 
     def _log_api_call(self, endpoint: str, operation: str, http_status: Optional[int], 
                       quota_cost: int, duration_ms: int, attempt: int, 
@@ -404,25 +408,27 @@ class YouTubeService:
     # --- MOCK PROVIDERS FOR OFFLINE DEVELOPMENT / TESTS ---
 
     def _get_mock_search_videos(self, query: str, limit: int) -> List[Dict[str, Any]]:
-        # Generates deterministic mock search results
+        # Generates deterministic mock search results matching query
         logger.info(f"Using default mock search for query '{query}'")
         videos = []
         now = datetime.now(timezone.utc)
         
-        # We will mock 12 candidate videos as described in Section 33 E2E test requirement
-        # To make it deterministic, we'll label them mock1 to mock12
+        # Extract keywords from query
+        clean_q = query.replace("(", "").replace(")", "").replace("-", "")
+        terms = [t.strip() for t in clean_q.split("|") if t.strip()]
+        base_topic = terms[0] if terms else "Fitness Workout"
+        
         for i in range(1, 13):
             video_id = f"mock_vid_{i}"
-            # Mix titles to match AI agents concept
-            title = f"Building AI agents {i} - Everything you need to know" if i <= 8 else f"Random non-related video {i}"
-            desc = "This is a video description detailing agentic AI systems and LLM workflows."
+            title = f"{base_topic.title()} - Ultimate Guide & Routine {i}"
+            desc = f"Comprehensive fitness video guide covering {base_topic} nutrition, workout routines, and hypertrophy techniques."
             videos.append({
                 "video_id": video_id,
                 "title": title,
                 "description": desc,
                 "channel_id": f"mock_channel_{i}",
-                "channel_title": f"Creator Studio {i}",
-                "published_at": (now - timedelta(days=2)).isoformat(),
+                "channel_title": f"Fitness Studio {i}",
+                "published_at": (now - timedelta(hours=18)).isoformat(),
                 "thumbnail_url": f"https://img.youtube.com/vi/{video_id}/default.jpg"
             })
         self._log_api_call("search.list", "search_videos", 200, 100, 50, 1, True, metadata={"query": query, "limit": limit, "returned_count": len(videos)})
@@ -432,20 +438,20 @@ class YouTubeService:
         logger.info(f"Using default mock video details for IDs: {video_ids}")
         now = datetime.now(timezone.utc)
         results = []
-        for vid in video_ids:
+        for i, vid in enumerate(video_ids):
             results.append({
                 "video_id": vid,
-                "title": f"Mock Video Title for {vid}",
-                "description": "Mock Description detailing agentic AI systems.",
-                "channel_id": f"channel_{vid}",
-                "published_at": (now - timedelta(days=2)).isoformat(),
+                "title": f"Fitness Workout & Nutrition Guide {vid}",
+                "description": "Comprehensive fitness video guide covering diet, workout routines, and hypertrophy techniques.",
+                "channel_id": f"mock_channel_{i+1}",
+                "published_at": (now - timedelta(hours=18)).isoformat(),
                 "duration_seconds": 360,
                 "category_id": "27",
                 "language": "en",
                 "thumbnail_url": f"https://img.youtube.com/vi/{vid}/default.jpg",
-                "view_count": 1000,
-                "like_count": 50,
-                "comment_count": 10
+                "view_count": 2500 + (i * 1500),
+                "like_count": 150 + (i * 80),
+                "comment_count": 25 + (i * 12)
             })
         self._log_api_call("videos.list", "get_videos_details", 200, 1, 20, 1, True, metadata={"requested_count": len(video_ids)})
         return results
