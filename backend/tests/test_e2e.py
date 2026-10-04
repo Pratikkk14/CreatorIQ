@@ -1,6 +1,7 @@
 import pytest
 from datetime import datetime, timezone, date, timedelta
 from app.core import database
+from app.core.config import settings
 from app.models.models import Concept, ConceptDailySignal
 from app.services.youtube_api import YouTubeService
 from app.services.semantic import SemanticService
@@ -41,7 +42,7 @@ def test_e2e_3day_simulation(db_session):
     # Check database signal written
     sig0 = db_session.query(ConceptDailySignal).filter(
         ConceptDailySignal.concept_id == concept.id,
-        ConceptDailySignal.video_date == base_date - timedelta(days=3)
+        ConceptDailySignal.video_date == base_date - timedelta(days=settings.lag_days)
     ).first()
     assert sig0 is not None
     assert sig0.population_size == 5
@@ -58,26 +59,26 @@ def test_e2e_3day_simulation(db_session):
 
     # ==================== DAY 1 EXECUTION ====================
     mock_prov.day = 1
-    # Process videos published on base_date - 2 days (2026-08-17)
+    # Process videos published on base_date + 1 day
     res1 = engine.execute_concept_run(db_session, concept.id, base_date + timedelta(days=1))
     assert res1["status"] == "success"
     
     sig1 = db_session.query(ConceptDailySignal).filter(
         ConceptDailySignal.concept_id == concept.id,
-        ConceptDailySignal.video_date == base_date - timedelta(days=2)
+        ConceptDailySignal.video_date == base_date + timedelta(days=1) - timedelta(days=settings.lag_days)
     ).first()
     assert sig1 is not None
     assert sig1.population_size == 5
 
     # ==================== DAY 2 EXECUTION ====================
     mock_prov.day = 2
-    # Process videos published on base_date - 1 day (2026-08-18)
+    # Process videos published on base_date + 2 days
     res2 = engine.execute_concept_run(db_session, concept.id, base_date + timedelta(days=2))
     assert res2["status"] == "success"
     
     sig2 = db_session.query(ConceptDailySignal).filter(
         ConceptDailySignal.concept_id == concept.id,
-        ConceptDailySignal.video_date == base_date - timedelta(days=1)
+        ConceptDailySignal.video_date == base_date + timedelta(days=2) - timedelta(days=settings.lag_days)
     ).first()
     assert sig2 is not None
     assert sig2.population_size == 5

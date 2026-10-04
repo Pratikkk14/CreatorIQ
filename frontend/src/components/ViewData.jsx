@@ -16,15 +16,7 @@ export default function ViewData() {
   // Table display names and descriptions
   const tableDescriptions = {
     concepts: "Trend concepts monitored by the longitudinal prediction system.",
-    channels: "YouTube channel registries including subscriber and video counts.",
-    videos: "YouTube video registries showing initial discovery stats.",
-    search_runs: "Discovery search runs executed for active queries.",
-    video_candidates: "Discovered video candidates with semantic relevance scores and check outcomes.",
-    population_runs: "Active population selection runs and target size settings.",
-    population_members: "Video members selected to populate specific trend cohorts.",
-    video_observations: "Longitudinal daily observation counts (views, likes, comments).",
-    video_metrics: "Longitudinal calculated changes (velocities, growth, acceleration).",
-    concept_daily_signals: "Rollup trend signal aggregates (median velocities, bucket percentiles).",
+    concept_daily_signals: "Rollup trend signal aggregates (median velocities, bucket percentiles, outlier metrics).",
     api_request_logs: "Auditing request costs, HTTP statuses, and error trace logs."
   };
 
@@ -134,9 +126,10 @@ export default function ViewData() {
       <style>{`
         .view-data-layout {
           display: grid;
-          grid-template-columns: 280px 1fr;
+          grid-template-columns: 260px minmax(0, 1fr);
           gap: 24px;
           margin-top: 8px;
+          width: 100%;
         }
         .table-tab-list {
           display: flex;
@@ -187,6 +180,8 @@ export default function ViewData() {
           min-height: 500px;
           display: flex;
           flex-direction: column;
+          min-width: 0;
+          width: 100%;
         }
         .controls-row {
           display: flex;
@@ -238,21 +233,39 @@ export default function ViewData() {
           cursor: pointer;
         }
         .scrollable-table-wrapper {
+          width: 100%;
           overflow-x: auto;
+          overflow-y: auto;
           border: 1px solid var(--border);
           border-radius: 8px;
           background: rgba(0, 0, 0, 0.2);
           max-height: 600px;
-          overflow-y: auto;
+          box-sizing: border-box;
+        }
+        .scrollable-table-wrapper::-webkit-scrollbar {
+          height: 10px;
+          width: 8px;
+        }
+        .scrollable-table-wrapper::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.4);
+          border-radius: 4px;
+        }
+        .scrollable-table-wrapper::-webkit-scrollbar-thumb {
+          background: rgba(99, 102, 241, 0.5);
+          border-radius: 4px;
+        }
+        .scrollable-table-wrapper::-webkit-scrollbar-thumb:hover {
+          background: var(--primary);
         }
         .raw-data-table {
-          width: 100%;
+          width: max-content;
+          min-width: 100%;
           border-collapse: collapse;
           text-align: left;
           font-size: 0.85rem;
         }
         .raw-data-table th {
-          background: rgba(255, 255, 255, 0.04);
+          background: rgba(20, 21, 24, 0.95);
           padding: 12px 16px;
           font-weight: 600;
           color: var(--text-primary);
@@ -260,13 +273,14 @@ export default function ViewData() {
           position: sticky;
           top: 0;
           z-index: 10;
+          white-space: nowrap;
         }
         .raw-data-table td {
           padding: 10px 16px;
           border-bottom: 1px solid var(--border);
           color: var(--text-secondary);
           white-space: nowrap;
-          max-width: 300px;
+          max-width: 350px;
           overflow: hidden;
           text-overflow: ellipsis;
         }

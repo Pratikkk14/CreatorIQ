@@ -35,8 +35,9 @@ def fixture_db_session():
     
     # Seed default concept
     concept = Concept(
-        id=1,
+        id="10000000-0000-0000-0000-000000000001",
         name="AI Agents",
+        category="Fitness",
         description="Monitors agentic AI workflows, frameworks, and LLM automation tools",
         active=True,
         include_terms=["AI agents", "agentic AI", "AI automation"],

@@ -34,7 +34,7 @@ class PipelineEngine:
         end = start + timedelta(hours=24) - timedelta(seconds=1)
         return start, end
 
-    def execute_concept_run(self, db: Session, concept_id: int, execution_date: Optional[date] = None) -> Dict[str, Any]:
+    def execute_concept_run(self, db: Session, concept_id: str, execution_date: Optional[date] = None) -> Dict[str, Any]:
         """Executes the daily intelligence extraction pipeline for a single concept."""
         concept = db.query(Concept).filter(Concept.id == concept_id).first()
         if not concept:
@@ -151,11 +151,12 @@ class PipelineEngine:
 
             after_lang_filter_count += 1
 
-            # --- Stage 3: Semantic Filtering (all-MiniLM-L6-v2) ---
-            # Compare concept.name against video title + video description[:300]
-            video_text = f"{title} {description[:300]}"
+            # --- Stage 3: Semantic Concept Identity Filtering ---
+            # Compare rich concept context (name + description + terms) against video title + description[:300]
+            concept_text = f"{concept.name}: {concept.description or ''} {' '.join(concept.include_terms or [])}".strip()
+            video_text = f"{title} {description[:300]}".strip()
             try:
-                score = self.semantic.compute_similarity(concept.name, video_text)
+                score = self.semantic.compute_similarity(concept_text, video_text)
             except Exception as e:
                 logger.error(f"Semantic scoring explicitly failed for video {v_id}: {e}")
                 # Re-raise to fail the entire run explicitly
@@ -228,25 +229,40 @@ class PipelineEngine:
                 big_count += 1
             v["channel_tier"] = tier
 
-        # 5. Engagement Metrics Calculation
+        # 5. Engagement Metrics & Composite Trend Score Calculation
         for v in processed_videos:
-            subs = v["subscriber_count"]
-            views = v["view_count"]
-            likes = v["like_count"]
-            comments = v["comment_count"]
+            subs = v.get("subscriber_count") or 0
+            views = v.get("view_count") or 0
+            likes = v.get("like_count") or 0
+            comments = v.get("comment_count") or 0
+            score = v.get("semantic_score") or 0.0
 
-            # Safe Division
-            v["reach_ratio"] = float((views / subs) / 100) if subs > 0 else 0.0
-            v["interaction_density"] = float((likes + comments) / views) if views > 0 else 0.0
+            # Safe Division: Reach ratio = (view count / subscribers) / 100
+            rr = float((views / subs) / 100) if subs > 0 else 0.0
+            # Interaction density = (likes + comments) / view
+            id_density = float((likes + comments) / views) if views > 0 else 0.0
+
+            v["reach_ratio"] = rr
+            v["interaction_density"] = id_density
+
+            # Composite Trend Score (0 - 100 Scale)
+            norm_reach = min(100.0, rr * 50.0)
+            norm_interaction = min(100.0, id_density * 1000.0)
+            norm_semantic = float(score * 100.0)
+            
+            trend_score = round(0.45 * norm_reach + 0.35 * norm_interaction + 0.20 * norm_semantic, 2)
+            v["trend_score"] = trend_score
 
         # Aggregated Daily Medians & Means
         reach_ratios = [v["reach_ratio"] for v in processed_videos]
         interaction_densities = [v["interaction_density"] for v in processed_videos]
         semantic_scores = [v["semantic_score"] for v in processed_videos]
+        trend_scores = [v["trend_score"] for v in processed_videos]
 
         reach_ratio_median = float(np.median(reach_ratios))
         interaction_density_median = float(np.median(interaction_densities))
         semantic_score_mean = float(np.mean(semantic_scores))
+        trend_score_median = float(np.median(trend_scores))
 
         # 6. Statistical Outlier Detection (μ + 2σ)
         high_variance_flags = []
@@ -272,7 +288,8 @@ class PipelineEngine:
                         "reach_ratio_outlier": bool(is_rr_outlier),
                         "interaction_density": v["interaction_density"],
                         "interaction_density_outlier": bool(is_id_outlier),
-                        "channel_tier": v["channel_tier"]
+                        "channel_tier": v["channel_tier"],
+                        "trend_score": v["trend_score"]
                     })
         else:
             # Under 2 videos, cannot compute standard deviation
@@ -288,7 +305,7 @@ class PipelineEngine:
             top_outlier = high_variance_flags[0]
 
         top_outlier_video_id = top_outlier["video_id"] if top_outlier else None
-        top_outlier_video_ratio = top_outlier["reach_ratio"] if top_outlier else None
+        top_outlier_reach_ratio = top_outlier["reach_ratio"] if top_outlier else None
         top_outlier_interaction_density = top_outlier["interaction_density"] if top_outlier else None
         top_outlier_semantic_score = next((v["semantic_score"] for v in processed_videos if v["video_id"] == top_outlier_video_id), None) if top_outlier else None
         top_outlier_channel_tier = top_outlier["channel_tier"] if top_outlier else None
@@ -322,9 +339,10 @@ class PipelineEngine:
             reach_ratio_median=reach_ratio_median,
             interaction_density_median=interaction_density_median,
             semantic_score_mean=semantic_score_mean,
+            trend_score_median=trend_score_median,
             
             top_outlier_video_id=top_outlier_video_id,
-            top_outlier_video_ratio=top_outlier_video_ratio,
+            top_outlier_reach_ratio=top_outlier_reach_ratio,
             top_outlier_interaction_density=top_outlier_interaction_density,
             top_outlier_semantic_score=top_outlier_semantic_score,
             top_outlier_channel_tier=top_outlier_channel_tier,
@@ -381,7 +399,7 @@ class PipelineEngine:
             semantic_score_mean=None,
             
             top_outlier_video_id=None,
-            top_outlier_video_ratio=None,
+            top_outlier_reach_ratio=None,
             top_outlier_interaction_density=None,
             top_outlier_semantic_score=None,
             top_outlier_channel_tier=None,

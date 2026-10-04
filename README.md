@@ -1,187 +1,147 @@
-# YouTube Trend Intelligence Pipeline Ingestion System
+# CreatorIQ — Real-Time Trend Intelligence Pipeline
 
-A high-performance, resilient, and longitudinal data ingestion system designed to track YouTube video trends, filter search results dynamically, classify creators, calculate daily engagement metrics, and store flat aggregated trend signals with full video-level lineage.
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https.python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-6.0-646CFF.svg)](https://vitejs.dev)
 
-Built using the **Python FastAPI Backend** and a **Vite React Frontend**.
+> 💡 **Project Context**: This repository is a specialized real-time ingestion pipeline component within the larger **CreatorIQ** AI SaaS platform. It handles real-time YouTube search candidate discovery, multi-stage semantic filtering, relative channel percentiles, composite **Trend Scoring**, and outlier tracking across monitored niche concepts.
 
 ---
 
-## 🗺️ System Architecture & Ingestion Flow
+## 🎯 Goal-Oriented Project Overview
 
-The system runs a **consolidated, search-derived ingestion pipeline** in a single pass daily. The execution flow is as follows:
+The objective of this project is to provide a robust, automated **Real-Time YouTube Trend Intelligence Engine** that operates continuously (scheduled 3 times daily at 00:00, 08:00, 16:00 UTC) to identify rising video concepts, quantify creator performance, and produce normalized daily trend signals.
 
-```text
-    Concept Config (Inclusions & Exclusions)
-                       │
-                       ▼
-         Calculate target window (D - 3)
-                       │
-                       ▼
-      YouTube Search (Dimension: 2d, Max: 40)
-                       │
-                       ▼
-    Fetch Videos and Channel Details in Batches
-                       │
-                       ▼
-     Stage 1: Hard Filters (Views, Subs, Dur, Desc)
-                       │
-                       ▼
-     Stage 2: Language Filter (English validation)
-                       │
-                       ▼
-    Stage 3: Semantic Relevance (all-MiniLM-L6-v2)
-                       │
-                       ▼
-    Creator Bucketing via Relative Percentiles (Q25/Q75)
-                       │
-                       ▼
-    Calculate Engagement (Reach Ratio & Interaction Density)
-                       │
-                       ▼
-         Flag Outliers (mean + 2 * std)
-                       │
-                       ▼
-         Increment/Reset Outlier Streak
-                       │
-                       ▼
-    Persist Daily Signal & Population Audit Logs to DB
+Rather than relying on static creator lists, this pipeline dynamically evaluates real-time YouTube candidate populations for **10 tracked Fitness concepts** defined in [`concepts.yaml`](file:///d:/Projects/Desktop/agy2-projects/CreatorIQ/backend/config/concepts.yaml):
+
+| # | Concept Name | Description | Include Terms (YouTube Search Query) | Targeted Exclude Terms (Domain Separation) |
+| :-: | :--- | :--- | :--- | :--- |
+| **1** | **Diet** | Nutrition, meal plans, calorie surplus/deficit, and dieting strategies | `"fitness diet"`, `"gym nutrition"`, `"meal prep fitness"`, `"calorie deficit workout"` | `"-supplement review"`, `"-whey protein review"`, `"-pre workout review"` |
+| **2** | **Muscle training** | Hypertrophy, resistance training, weight lifting, and muscle building workouts | `"muscle training"`, `"hypertrophy workout"`, `"weight lifting routine"`, `"muscle growth exercises"` | `"-calisthenics bodyweight"`, `"-posing routine stage"`, `"-gym humor meme"` |
+| **3** | **Calisthenics** | Bodyweight training, gymnastics strength, muscle-ups, and pull-ups | `"calisthenics"`, `"bodyweight workout"`, `"handstand pushups"`, `"muscle up tutorial"` | `"-heavy barbell bench"`, `"-deadlift max attempt"`, `"-dumbbell curl hypertrophy"` |
+| **4** | **Gym Entertainment** | Gym humor, fitness challenges, PR reactions, and fitness creator entertainment | `"gym entertainment"`, `"gym humor"`, `"fitness challenge"`, `"gym meme workout"` | `"-form tutorial guide"`, `"-bench press technique"`, `"-exercise form analysis"` |
+| **5** | **Gym time management** | Workout efficiency, busy gym routines, rest interval optimization, and quick workouts | `"gym time management"`, `"efficient workout routine"`, `"quick gym session"`, `"30 minute workout"` | `"-2 hour workout vlog"`, `"-full day of eating"`, `"-gym equipment review"` |
+| **6** | **Protein intake strategies** | Whey protein, daily protein targets, protein timing, and muscle recovery nutrition | `"protein intake strategies"`, `"daily protein requirement"`, `"whey protein timing"`, `"high protein meals"` | `"-pre workout supplement review"`, `"-fat loss cardio routine"`, `"-gym equipment review"` |
+| **7** | **Bodybuilding** | Competitive bodybuilding, posing routines, muscle symmetry, and prep guides | `"bodybuilding"`, `"classic physique workout"`, `"bodybuilding motivation"`, `"stage prep fitness"` | `"-powerlifting meet max"`, `"-strongman log press"`, `"-gym humor meme"` |
+| **8** | **Gym reviews** | Gym equipment reviews, commercial gym tours, supplement reviews, and lifting gear | `"gym review"`, `"gym equipment review"`, `"supplement review fitness"`, `"lifting shoes review"` | `"-bench press form guide"`, `"-squat technique tutorial"`, `"-full workout vlog"` |
+| **9** | **How to do exercises** | Exercise form tutorials, bench press technique, squat form tips, and injury prevention | `"how to do exercises"`, `"bench press form tutorial"`, `"squat exercise technique"`, `"deadlift form guide"` | `"-gym meme funny"`, `"-lifting shoes review"`, `"-gym equipment tour"` |
+| **10** | **How to improve yourself** | Fitness mindset, discipline, physical transformation guides, and workout consistency | `"how to improve yourself fitness"`, `"fitness transformation mindset"`, `"workout discipline guide"`, `"self improvement gym"` | `"-financial independence passive income"`, `"-stock market investing"`, `"-coding programming tutorial"` |
+
+### 🎯 Targeted Domain Separation Rationale
+Exclusion terms are explicitly engineered to **prevent topic overlap between adjacent fitness niches**:
+- **Diet vs. Protein Intake & Reviews**: `Diet` excludes `"supplement review"` and `"whey protein review"` so product reviews land in `Gym reviews` and supplement specifics land in `Protein intake strategies`.
+- **Bodybuilding vs. Powerlifting**: `Bodybuilding` excludes `"powerlifting meet max"` and `"strongman"` to separate aesthetic stage prep from 1RM max strength lifting.
+- **Form Guides vs. Entertainment**: `How to do exercises` excludes `"gym meme funny"` to keep technical form tutorials separate from comedic entertainment content.
+
+---
+
+## 🗺️ High-Level System Architecture & Ingestion Flow
+
+```mermaid
+graph TD
+    A[Cron Scheduler / API Trigger] -->|3x Daily: 00:00, 08:00, 16:00 UTC| B[1. Concept Ingestion Window]
+    B -->|Search Query Generation| C[2. YouTube Data API v3]
+    
+    C -->|Up to 40 Candidates| D[3. Batch Metadata Fetch]
+    D -->|Views, Likes, Subs, Duration| E{4. Multi-Stage Filter Gate}
+    
+    E -->|Stage 1: Hard Gate| F[Views >= 50, Subs >= 100, Desc >= 30]
+    E -->|Stage 2: Language Gate| G[English Language Validation]
+    E -->|Stage 3: Semantic Identity Gate| H[SentenceTransformer MiniLM Similarity]
+    
+    H -->|Match Score > Threshold| I[5. Fit Population Selection]
+    I --> J[6. Relative Percentile Bucketing Q25/Q75]
+    J -->|Small / Medium / Big Tiers| K[Population Composition Counts]
+    
+    I --> L[7. Metric & Trend Score Engine]
+    L -->|Reach Ratio = views/subs / 100| M[Composite Trend Score 0-100]
+    L -->|Interaction Density = likes+comments/views| M
+    
+    I --> N[8. Statistical Outliers μ + 2σ]
+    N -->|Max Reach Ratio Outlier| O[Top Outlier & Streak Counter]
+    
+    M --> P[(9. ConceptDailySignal Database Record)]
+    K --> P
+    O --> P
 ```
 
 ---
 
-## 🚀 Key Architectural Principles
+## 📂 Repository Directory Documentation
 
-1. **Daily Search-Derived Populations**: The system does **not** permanently track a fixed pool of creator channels. Instead, for each concept and extraction date, it dynamically fetches a fresh set of candidates published exactly on target publication date `D - 3 days` (lag configurable).
-2. **Relative Creator Bucketing**: Rather than using hardcoded subscriber count limits, the system dynamically calculates the 25th percentile (Q25) and 75th percentile (Q75) of the subscriber counts of the *final surviving population* on that day, categorizing them into `small` (< Q25), `medium` (Q25 <= sub < Q75), and `big` (>= Q75).
-3. **Flat Daily Ingestion Signal Table**: Obsolete relational tables (`videos`, `channels`, `video_observations`, `video_candidates`, `population_runs`, `population_members`, `search_runs`) are inactive. The pipeline writes **exclusively** to `concept_daily_signals` and `api_request_logs`. Per-video audits, outliers, and filter rejection counts are stored directly inside flat JSON fields (`population`, `high_variance_flags`, `filter_audit`) in the daily signals table.
-4. **Strict Local Semantic Model**: Uses the local offline `all-MiniLM-L6-v2` SentenceTransformer model to calculate cosine similarity between the concept name and video text. If model loading or encoding fails, the pipeline fails explicitly to prevent silent fallbacks.
+The codebase is organized into clean, decoupled directories with detailed internal documentation:
 
----
+- 📖 [**Backend Documentation (`backend/README.md`)**](file:///d:/Projects/Desktop/agy2-projects/CreatorIQ/backend/README.md)
+  - Full details on FastAPI REST endpoints (`/api/diagnostics`, `/api/concepts`, `/api/signals`, `/api/latest-entries`, `/api/provenance`).
+  - Mathematical metric formulas (Reach Ratio, Interaction Density, Composite Trend Score, Outlier $\mu+2\sigma$).
+  - Multi-stage pipeline logic, SQLAlchemy ORM models (`Concept`, `ConceptDailySignal`), and CLI command reference.
 
-## 📁 Repository Structure
-
-```text
-CreatorIQ/
-├── backend/
-│   ├── app/
-│   │   ├── api/             # FastAPI REST endpoints
-│   │   ├── cli/             # Click command-line interface commands
-│   │   ├── core/            # Configuration, database connection, scheduler
-│   │   ├── models/          # Declarative SQLAlchemy models (concepts, daily signals, api logs)
-│   │   ├── services/        # YouTube API wrapper, semantic model service, pipeline engine
-│   │   └── main.py          # Application entrypoint (CLI & FastAPI server setup)
-│   ├── config/              # YAML config files (concepts.yaml, pipeline.yaml, selection.yaml)
-│   ├── myvenv/              # Python virtual environment (Windows/Linux/macOS)
-│   └── requirements.txt     # Python requirements (including torch, sentence-transformers, langdetect)
-├── frontend/
-│   ├── src/                 # React component layouts, graphs, and styling
-│   └── package.json         # Frontend package manifests
-├── .env-samples             # Environment variables template file
-└── README.md                # System documentation
-```
+- 📖 [**Frontend Documentation (`frontend/README.md`)**](file:///d:/Projects/Desktop/agy2-projects/CreatorIQ/frontend/README.md)
+  - Single-page Vite + React UI dashboard setup.
+  - Real-Time 3x/Day status panel, **Top Populated Entries Leaderboard** with Trend Score progress gauges, and raw database inspection tools.
 
 ---
 
-## 🛠️ Developer Setup & Installation
+## 🚀 Quickstart & Setup Guide
 
-All backend python commands **MUST** be run inside the virtual environment (`myvenv`) inside the `backend/` directory.
+### 1. Backend Setup & Data Seeding
 
-### 1. Backend Setup
-Initialize the virtual environment and install packages:
 ```bash
 cd backend
+
+# 1. Create and activate Python virtual environment
 python -m venv myvenv
-myvenv\Scripts\activate      # Windows PowerShell/CMD
+myvenv\Scripts\activate      # Windows
 source myvenv/bin/activate   # macOS/Linux
 
+# 2. Install backend dependencies
 pip install -r requirements.txt
-```
 
-### 2. Configure Environment Variables
-Copy the template file `.env-samples` to a new file named `.env` in the workspace root:
-```bash
+# 3. Create .env from template and add Youtube_API_KEY
 cp ../.env-samples ../.env
-```
-Open `.env` and fill in your connection string and credentials:
-* `DATABASE_URL` / `POSTGRES_DB` (PostgreSQL connection URL)
-* `Youtube_API_KEY` (Google Cloud Console YouTube Data API v3 key)
 
-### 3. Recreate and Seed Database Tables
-To drop any old database schemas and build/seed the new tables instantly, run:
-```bash
-# Drops all tables and recreates them with updated schema columns
-myvenv\Scripts\python -m app.main recreate-db
+# 4. Recreate database tables with new schema
+myvenv\Scripts\python -m app.main recreate-db --yes
 
-# Seeds active concepts defined in config/concepts.yaml
+# 5. Seed the 10 Fitness concepts into the database
 myvenv\Scripts\python -m app.main seed-db
-```
 
----
-
-## 🏃 Running the Application
-
-### 1. Manual Ingestion Run (Mock Mode)
-To run a full, unified extraction pipeline on mock data for development:
-```bash
-myvenv\Scripts\python -m app.main pipeline run --mock
-```
-*Add option `--date YYYY-MM-DD` to target specific execution dates (defaults to today).*
-
-### 2. Manual Ingestion Run (Real API)
-To run the extraction pipeline querying real live YouTube endpoints:
-```bash
-myvenv\Scripts\python -m app.main pipeline run
-```
-
-### 3. Start the Backend Web Server
-Launch the FastAPI server on port 8000:
-```bash
+# 6. Start the FastAPI backend server
 myvenv\Scripts\uvicorn app.main:api_app --host 127.0.0.1 --port 8000
 ```
-This automatically boots the daily background cron scheduler (running at configured timezone/cron hour). View API documentation at `http://127.0.0.1:8000/docs`.
 
-### 4. Start the Frontend React App
-In a separate terminal, install dependencies and boot the Vite development server:
+*Backend API Docs*: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+
+### 2. Frontend Setup
+
+In a new terminal window:
+
 ```bash
 cd frontend
+
+# Install frontend dependencies
 npm install
+
+# Start Vite React development server
 npm run dev
 ```
-Open `http://localhost:5173` in your browser. The frontend graphs will automatically display the daily trend signals and allow you to trace provenance lineages.
+
+*Frontend Dashboard*: [http://localhost:5173](http://localhost:5173)
 
 ---
 
-## 📟 CLI Command Reference
+## 🧪 Testing & Verification
 
-All commands must be executed from the `backend/` folder:
+Run the automated test suite to verify pipeline calculations, semantic similarity filtering, and idempotency:
 
-*   **Diagnostics**: Check database connectivity, YouTube configuration parameters, and daily signals generated:
-    ```bash
-    myvenv\Scripts\python -m app.main diagnostics
-    ```
-*   **Reset Database**: Truncate all records from all database tables:
-    ```bash
-    myvenv\Scripts\python -m app.main reset-db --yes
-    ```
-*   **Recreate Database**: Drop all tables and rebuild schemas:
-    ```bash
-    myvenv\Scripts\python -m app.main recreate-db --yes
-    ```
-*   **Seed Database**: Seed default concepts:
-    ```bash
-    myvenv\Scripts\python -m app.main seed-db
-    ```
-*   **Run Pipeline**: Trigger the ingestion job:
-    ```bash
-    myvenv\Scripts\python -m app.main pipeline run [--mock] [--date YYYY-MM-DD]
-    ```
-
----
-
-## 🧪 Testing
-
-Execute the test suite to assert calculations and E2E simulation correctness:
 ```bash
 cd backend
 myvenv\Scripts\pytest tests -v
 ```
+
+---
+
+## 📄 License & Ecosystem Context
+
+Part of the **CreatorIQ** AI SaaS ecosystem. Proprietary — All rights reserved.

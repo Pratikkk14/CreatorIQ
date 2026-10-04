@@ -53,10 +53,13 @@ def get_diagnostics(db: Session = Depends(get_db)):
 def list_concepts(db: Session = Depends(get_db)):
     return db.query(Concept).all()
 
+import uuid
+
 @router.post("/concepts")
-def create_concept(name: str, queries: List[str], description: Optional[str] = None, db: Session = Depends(get_db)):
+def create_concept(name: str, queries: List[str], description: Optional[str] = None, category: str = "Fitness", db: Session = Depends(get_db)):
     # Map input queries as include_terms, with exclude_terms defaulting to an empty list
-    concept = Concept(name=name, include_terms=queries, exclude_terms=[], description=description, active=True)
+    concept_id = str(uuid.uuid4())
+    concept = Concept(id=concept_id, name=name, category=category, include_terms=queries, exclude_terms=[], description=description, active=True)
     try:
         db.add(concept)
         db.commit()
@@ -67,7 +70,7 @@ def create_concept(name: str, queries: List[str], description: Optional[str] = N
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/signals")
-def get_signals(concept_id: int, start: Optional[date] = None, end: Optional[date] = None, db: Session = Depends(get_db)):
+def get_signals(concept_id: str, start: Optional[date] = None, end: Optional[date] = None, db: Session = Depends(get_db)):
     query = db.query(ConceptDailySignal).filter(ConceptDailySignal.concept_id == concept_id)
     if start:
         query = query.filter(ConceptDailySignal.video_date >= start)
@@ -81,11 +84,27 @@ def get_signals(concept_id: int, start: Optional[date] = None, end: Optional[dat
         results.append({
             "id": s.id,
             "concept_id": s.concept_id,
+            "concept_name": s.concept_name,
+            "processed_at": s.processed_at.isoformat() if s.processed_at else None,
             "signal_date": s.video_date.isoformat(),
             "population_size": s.population_size,
             "observation_coverage": 1.0 if s.population_size > 0 else 0.0,
             
-            # Derived engagement metrics mapped to chart keys
+            # Core daily signals
+            "reach_ratio_median": s.reach_ratio_median,
+            "interaction_density_median": s.interaction_density_median,
+            "semantic_score_mean": s.semantic_score_mean,
+            "trend_score_median": s.trend_score_median,
+            
+            # Outlier tracking
+            "top_outlier_video_id": s.top_outlier_video_id,
+            "top_outlier_reach_ratio": s.top_outlier_reach_ratio,
+            "top_outlier_interaction_density": s.top_outlier_interaction_density,
+            "top_outlier_semantic_score": s.top_outlier_semantic_score,
+            "top_outlier_channel_tier": s.top_outlier_channel_tier,
+            "outlier_streak": s.outlier_streak,
+            
+            # Legacy/Frontend chart key mappings
             "median_view_velocity": (s.reach_ratio_median * 1000) if s.reach_ratio_median is not None else None,
             "median_view_growth": s.reach_ratio_median,
             "median_view_acceleration": s.semantic_score_mean,
@@ -94,11 +113,50 @@ def get_signals(concept_id: int, start: Optional[date] = None, end: Optional[dat
             "median_interaction_density": s.interaction_density_median,
             
             # Creator count ratios
+            "big_channel_count": s.big_channel_count,
+            "medium_channel_count": s.medium_channel_count,
+            "small_channel_count": s.small_channel_count,
             "big_creator_signal": s.big_channel_count,
             "medium_creator_signal": s.medium_channel_count,
-            "small_creator_signal": s.small_channel_count
+            "small_creator_signal": s.small_channel_count,
+            
+            "keywords": s.keywords
         })
     return results
+
+@router.get("/latest-entries")
+def get_latest_entries(limit: int = 20, db: Session = Depends(get_db)):
+    """
+    Returns the top video entries populated in recent pipeline runs across active concepts,
+    ordered by their calculated composite trend_score descending.
+    """
+    recent_signals = db.query(ConceptDailySignal).order_by(ConceptDailySignal.processed_at.desc()).limit(10).all()
+    entries = []
+    
+    for s in recent_signals:
+        pop = s.population or []
+        for item in pop:
+            entries.append({
+                "video_id": item.get("video_id"),
+                "title": item.get("title"),
+                "channel_id": item.get("channel_id"),
+                "concept_id": s.concept_id,
+                "concept_name": s.concept_name,
+                "view_count": item.get("view_count"),
+                "like_count": item.get("like_count"),
+                "subscriber_count": item.get("subscriber_count"),
+                "channel_tier": item.get("channel_tier"),
+                "reach_ratio": item.get("reach_ratio"),
+                "interaction_density": item.get("interaction_density"),
+                "semantic_score": item.get("semantic_score"),
+                "trend_score": item.get("trend_score", 0.0),
+                "published_at": item.get("published_at"),
+                "processed_at": s.processed_at.isoformat() if s.processed_at else None
+            })
+            
+    # Sort by trend_score descending
+    entries.sort(key=lambda x: x.get("trend_score", 0.0), reverse=True)
+    return entries[:limit]
 
 @router.get("/runs")
 def list_runs(db: Session = Depends(get_db)):
@@ -109,7 +167,7 @@ def list_runs(db: Session = Depends(get_db)):
     }
 
 @router.get("/provenance")
-def get_provenance(concept_id: int, target_date: date, db: Session = Depends(get_db)):
+def get_provenance(concept_id: str, target_date: date, db: Session = Depends(get_db)):
     """
     Traces the lineage of a daily concept signal back to the contributing videos and observations.
     In the new architecture, contributions are loaded directly from the daily signal population JSON.
@@ -134,6 +192,7 @@ def get_provenance(concept_id: int, target_date: date, db: Session = Depends(get
         "median_normalized_velocity": signal.reach_ratio_median,
         "median_reach_ratio": signal.reach_ratio_median,
         "median_interaction_density": signal.interaction_density_median,
+        "trend_score_median": signal.trend_score_median,
         "big_creator_signal": signal.big_channel_count,
         "medium_creator_signal": signal.medium_channel_count,
         "small_creator_signal": signal.small_channel_count
