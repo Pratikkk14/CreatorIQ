@@ -6,8 +6,9 @@ from app.models.base import Base
 class Concept(Base):
     __tablename__ = "concepts"
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(36), primary_key=True)
     name = Column(String(255), unique=True, nullable=False)
+    category = Column(String(100), default="Fitness", nullable=False)
     description = Column(String, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
     include_terms = Column(JSON, nullable=False)  # List of inclusion terms
@@ -22,27 +23,32 @@ class ConceptDailySignal(Base):
     __tablename__ = "concept_daily_signals"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    concept_id = Column(Integer, ForeignKey("concepts.id", ondelete="CASCADE"), nullable=False)
+    concept_id = Column(String(36), ForeignKey("concepts.id", ondelete="CASCADE"), nullable=False)
     concept_name = Column(String(255), nullable=False)
     processed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     video_date = Column(Date, nullable=False)
     population_size = Column(Integer, nullable=False)
     
+    # Core daily signals
     reach_ratio_median = Column(Float, nullable=True)
     interaction_density_median = Column(Float, nullable=True)
     semantic_score_mean = Column(Float, nullable=True)
+    trend_score_median = Column(Float, nullable=True)  # Composite video trend score median (0-100)
     
+    # Outlier tracking
     top_outlier_video_id = Column(String(255), nullable=True)
-    top_outlier_video_ratio = Column(Float, nullable=True)
+    top_outlier_reach_ratio = Column(Float, nullable=True)
     top_outlier_interaction_density = Column(Float, nullable=True)
     top_outlier_semantic_score = Column(Float, nullable=True)
-    top_outlier_channel_tier = Column(String(50), nullable=True)
+    top_outlier_channel_tier = Column(String(50), nullable=True)  # big / medium / small
     outlier_streak = Column(Integer, default=0, nullable=False)
     
+    # Population composition
     big_channel_count = Column(Integer, default=0, nullable=False)
     medium_channel_count = Column(Integer, default=0, nullable=False)
     small_channel_count = Column(Integer, default=0, nullable=False)
     
+    # Full audit trail
     keywords = Column(JSON, nullable=True)  # JSON list of video titles
     population = Column(JSON, nullable=True)  # Full per-video records list
     high_variance_flags = Column(JSON, nullable=True)  # Outlier videos list
