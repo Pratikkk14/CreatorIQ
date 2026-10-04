@@ -33,15 +33,15 @@ class Settings(BaseSettings):
     lag_days: int = Field(alias="LAG_DAYS", default=1)
     search_max_results: int = Field(alias="SEARCH_MAX_RESULTS", default=50)
     
-    min_views: int = Field(alias="MIN_VIEWS", default=0)
-    min_subscribers: int = Field(alias="MIN_SUBSCRIBERS", default=100)
-    min_duration_seconds: int = Field(alias="MIN_DURATION_SECONDS", default=120)
-    min_description_chars: int = Field(alias="MIN_DESCRIPTION_CHARS", default=30)
+    min_views: int = Field(alias="MIN_VIEWS", default=10)
+    min_subscribers: int = Field(alias="MIN_SUBSCRIBERS", default=50)
+    min_duration_seconds: int = Field(alias="MIN_DURATION_SECONDS", default=30)
+    min_description_chars: int = Field(alias="MIN_DESCRIPTION_CHARS", default=10)
     
     language: str = Field(alias="LANGUAGE", default="en")
     
     embedding_model: str = Field(alias="EMBEDDING_MODEL", default="all-MiniLM-L6-v2")
-    semantic_score_threshold: float = Field(alias="SEMANTIC_SCORE_THRESHOLD", default=0.3)
+    semantic_score_threshold: float = Field(alias="SEMANTIC_SCORE_THRESHOLD", default=0.25)
     
     outlier_sigma: float = Field(alias="OUTLIER_SIGMA", default=2.0)
     

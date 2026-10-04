@@ -152,11 +152,11 @@ class PipelineEngine:
             after_lang_filter_count += 1
 
             # --- Stage 3: Semantic Concept Identity Filtering ---
-            # Compare concept.name against video title + video description[:300]
-            # Videos that fail to match the semantic model for this concept are filtered out
-            video_text = f"{title} {description[:300]}"
+            # Compare rich concept context (name + description + terms) against video title + description[:300]
+            concept_text = f"{concept.name}: {concept.description or ''} {' '.join(concept.include_terms or [])}".strip()
+            video_text = f"{title} {description[:300]}".strip()
             try:
-                score = self.semantic.compute_similarity(concept.name, video_text)
+                score = self.semantic.compute_similarity(concept_text, video_text)
             except Exception as e:
                 logger.error(f"Semantic scoring explicitly failed for video {v_id}: {e}")
                 # Re-raise to fail the entire run explicitly
