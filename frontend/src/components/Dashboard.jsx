@@ -94,37 +94,37 @@ export default function Dashboard({ onSelectConcept, diagnostics, onRefreshDiag 
             <Database size={16} className="stat-card-icon" />
           </div>
           <div className="stat-card-value" style={{ color: diagnostics?.database === "OK" ? "var(--secondary)" : "var(--accent)" }}>
-            {diagnostics?.database || "CONNECTING..."}
+            {diagnostics?.database === "OK" ? "CONNECTED" : "DISCONNECTED"}
           </div>
         </div>
 
         <div className="stat-card primary">
           <div className="stat-card-header">
-            <span>Populated Videos</span>
-            <Activity size={16} className="stat-card-icon" />
+            <span>Tracked Fitness Concepts</span>
+            <Plus size={16} className="stat-card-icon" />
           </div>
           <div className="stat-card-value">
-            {diagnostics?.videos ?? diagnostics?.population_members ?? 0}
+            {concepts.length}
           </div>
         </div>
 
         <div className="stat-card secondary">
           <div className="stat-card-header">
-            <span>Tracked Concepts</span>
-            <Plus size={16} className="stat-card-icon" />
+            <span>Generated Daily Signals</span>
+            <TrendingUp size={16} className="stat-card-icon" />
           </div>
           <div className="stat-card-value">
-            {concepts.length || diagnostics?.active_concepts || 10}
+            {diagnostics?.signals ?? 0}
           </div>
         </div>
 
         <div className="stat-card">
           <div className="stat-card-header">
-            <span>Generated Signals</span>
-            <TrendingUp size={16} className="stat-card-icon" />
+            <span>Populated Real-Time Entries</span>
+            <Activity size={16} className="stat-card-icon" />
           </div>
           <div className="stat-card-value">
-            {diagnostics?.signals ?? 0}
+            {latestEntries.length}
           </div>
         </div>
       </div>
