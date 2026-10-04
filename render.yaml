@@ -3,6 +3,7 @@ services:
   - type: web
     name: creatoriq-backend
     env: python
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:api_app --host 0.0.0.0 --port $PORT
     rootDir: backend
@@ -45,3 +46,4 @@ databases:
   - name: creatoriq-db
     databaseName: creatoriq
     user: creatoriq_user
+    plan: free
