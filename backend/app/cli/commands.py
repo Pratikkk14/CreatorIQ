@@ -203,7 +203,9 @@ def seed_db():
         concepts_list = get_concepts_config()
         for c_data in concepts_list:
             concept = Concept(
+                id=c_data.get("id"),
                 name=c_data["name"],
+                category=c_data.get("category", "Fitness"),
                 description=c_data.get("description", ""),
                 active=c_data.get("active", True),
                 include_terms=c_data["include_terms"],
